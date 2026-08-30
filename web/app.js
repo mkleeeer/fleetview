@@ -608,7 +608,9 @@ async function sendChat() {
       ? await api('/api/app/send', { app: drawer.ref, text })
       : await api('/api/tab/send', { tabId: drawer.ref, text });
     pending.remove();
-    appendMsg({ role: 'assistant', text: r.reply || '(빈 응답)' });
+    // 경로마다 답이 담기는 칸이 다르다.
+    // /api/claude/send 는 reply, 어댑터 경로는 text 로 준다.
+    appendMsg({ role: 'assistant', text: r.text || r.reply || '(빈 응답)' });
   } catch (e) {
     pending.remove();
     appendMsg({ role: 'sys', text: '실패: ' + e.message });
