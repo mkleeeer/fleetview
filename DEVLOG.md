@@ -342,6 +342,39 @@ FleetView 서버(=내 Claude Code 세션의 자식)에서 테스트용 세션을
 `CLAUDE_CODE_ENTRYPOINT` 를 비우고 실행한다. FleetView 가 세션을 띄우는 기능을
 만들 때 이 처리를 반드시 넣어야 한다.
 
+### 6.2 user 스코프 MCP 는 모든 세션에서 뜬다 — 가짜 채널 등록
+
+`claude mcp add --scope user fleetview` 로 등록하면 **모든 세션**에서 이 MCP 서버가
+자동 로드된다. 그래서 `--channels` 없이 시작한 세션에서도 채널 스크립트가 떠서
+"나 붙었다" 고 FleetView 에 등록해버렸다.
+
+그런 세션은 `notifications/claude/channel` 을 받아주지 않으므로, 대시보드는
+"채널 연결됨" 이라고 표시하지만 실제로 보내면 답 없이 타임아웃 난다.
+
+**수정:** 호스트 프로세스의 실행 인자를 직접 확인해서, `--channels` 또는
+`--dangerously-load-development-channels` 에 `fleetview` 가 들어 있을 때만 등록한다.
+
+```js
+const cmd = (Get-CimInstance Win32_Process -Filter "ProcessId=<hostPid>").CommandLine
+if (!/--channels|--dangerously-load-development-channels/.test(cmd)) return false;
+return /(^|[\s:])(server:)?fleetview(\s|$|@)/.test(cmd);
+```
+
+**교훈:** 능력을 선언했다고 그 능력이 활성화된 것은 아니다. 상대가 실제로 켰는지
+따로 확인해야 한다.
+
+### 6.3 대시보드가 경로를 자동으로 가른다
+
+세션마다 채널 연결 여부(`s.channel`)를 상태에 실어 보내고, 대시보드가 그에 따라
+경로를 고른다.
+
+| 세션 상태 | 보내는 경로 | 결과 |
+|---|---|---|
+| 채널 붙음 | `claude-channel` 어댑터 | 실행 중인 그 창으로 직접. 곁가지 없음 |
+| 채널 없음 | `claude -p --resume` | 새 프로세스. 답이 대시보드에만 남고 기록은 갈라짐 |
+
+채널이 없는 세션은 드로어 경고문에 갈라진다는 사실과 재시작 방법을 명시한다.
+
 ## 7. 재현 방법
 
 ```bash

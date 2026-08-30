@@ -85,6 +85,7 @@ function isRealUserText(t) {
   if (t.startsWith('<local-command')) return false;
   if (t.startsWith('Caveat:')) return false;
   if (t.startsWith('<system-reminder>')) return false;
+  if (t.startsWith('<channel')) return false;   // 채널로 주입된 메시지는 제목감이 아니다
   return true;
 }
 

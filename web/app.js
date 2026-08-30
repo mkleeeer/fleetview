@@ -41,7 +41,9 @@ function sessions() {
   for (const c of S.claude) {
     out.push({
       key: 'cc:' + c.id, kind: 'claude-code', ref: c.id, provider: 'claude',
-      title: c.title, sub: c.projectName + ' · ' + ago(c.updatedAt) + (c.lastTool ? ' · ' + c.lastTool : ''),
+      title: c.title,
+      sub: (c.channel ? '채널 · ' : '') + c.projectName + ' · ' + ago(c.updatedAt)
+        + (c.lastTool ? ' · ' + c.lastTool : ''),
       status: c.status, updatedAt: c.updatedAt, detail: c,
     });
   }
@@ -394,7 +396,10 @@ async function openDrawer(s) {
       : '앱이 아직 디버그 모드로 떠 있지 않습니다. 아래 「앱 연결」을 누르면 앱을 껐다 다시 띄웁니다. 대화 내용은 사라지지 않습니다.';
     warn.classList.remove('hidden');
   } else if (s.kind === 'claude-code') {
-    warn.textContent = '여기서 보낸 메시지는 claude CLI 로 이 세션을 이어서 실행합니다. 이 세션이 터미널에 열려 있어도 기록이 깨지지는 않지만, 답변은 그 창에 뜨지 않고 세션 기록의 곁가지로 갈라져 여기에만 남습니다.';
+    warn.textContent = s.detail.channel
+      ? '이 세션에는 채널이 붙어 있습니다. 보낸 메시지가 실행 중인 그 창으로 바로 들어가고, 답도 그 창에 남습니다.'
+      : '이 세션에는 채널이 붙어 있지 않습니다. 여기서 보내면 새 프로세스가 떠서 답이 이 창에만 남고 세션 기록에는 곁가지로 갈라집니다. '
+        + '갈라지지 않게 하려면 그 세션을 채널과 함께 다시 시작하세요: claude --resume <세션id> --dangerously-load-development-channels server:fleetview';
     warn.classList.remove('hidden');
   } else {
     warn.textContent = '이 탭의 입력창에 직접 입력하고 전송합니다. 탭을 닫거나 이동시키지 마세요.';
@@ -436,7 +441,11 @@ async function sendChat() {
   renderLanes();
   try {
     const r = drawer.kind === 'claude-code'
-      ? await api('/api/claude/send', { sessionId: drawer.ref, text })
+      // 채널이 붙어 있으면 실행 중인 그 세션으로 직접 넣는다(곁가지 없음).
+      // 없으면 예전 방식으로 새 프로세스를 띄운다.
+      ? drawer.detail.channel
+        ? await api('/api/adapters/send', { id: 'claude-channel', threadId: drawer.ref, text })
+        : await api('/api/claude/send', { sessionId: drawer.ref, text })
       : drawer.kind === 'app'
       ? await api('/api/app/send', { app: drawer.ref, text })
       : await api('/api/tab/send', { tabId: drawer.ref, text });

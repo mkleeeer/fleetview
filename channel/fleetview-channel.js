@@ -60,10 +60,31 @@ function findSession() {
   let pid = process.ppid;
   for (let i = 0; i < 6 && pid; i++) {
     const j = read(pid);
-    if (j && j.sessionId) return j;
+    if (j && j.sessionId) return { ...j, hostPid: pid };
     pid = parentOf(pid);
   }
   return null;
+}
+
+/**
+ * 이 세션이 진짜 "채널로" 나를 띄웠는지 확인한다.
+ *
+ * MCP 서버를 user 스코프로 등록하면 모든 세션에서 자동 로드된다. 그러면 --channels
+ * 없이 시작한 세션에서도 이 파일이 뜬다. 그런 세션은 notifications/claude/channel 을
+ * 받아주지 않으므로, 등록해봐야 대시보드에 "붙었다"고 거짓말하는 꼴이 된다.
+ * 그래서 호스트 프로세스의 실행 인자에 우리 서버 이름이 있는지 직접 확인한다.
+ */
+function isChannelEnabled(hostPid) {
+  if (!hostPid) return false;
+  try {
+    const cmd = execFileSync('powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command',
+       `(Get-CimInstance Win32_Process -Filter "ProcessId=${hostPid}").CommandLine`],
+      { windowsHide: true, timeout: 8000 }).toString();
+    if (!/--channels|--dangerously-load-development-channels/.test(cmd)) return false;
+    // 플래그는 있는데 다른 채널만 지정한 경우도 거른다
+    return /(^|[\s:])(server:)?fleetview(\s|$|@)/.test(cmd);
+  } catch { return false; }
 }
 
 const me = findSession();
@@ -174,6 +195,11 @@ async function pump() {
   if (!sessionId) {
     log('세션 id 를 못 찾아 폴링을 시작하지 않습니다');
     return;
+  }
+  if (!isChannelEnabled(me.hostPid)) {
+    log('이 세션은 --channels 없이 시작됐습니다. 채널로 등록하지 않습니다.');
+    log('채널로 쓰려면: claude --dangerously-load-development-channels server:fleetview');
+    return;   // 도구는 그대로 노출되지만 주입은 하지 않는다
   }
   await register();
   pump().catch((e) => log('폴링 중단:', e.message));

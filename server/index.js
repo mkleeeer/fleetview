@@ -67,7 +67,9 @@ function serveStatic(res, urlPath) {
 // ---- Claude Code 세션 폴링 ------------------------------------------------
 function refreshClaude() {
   const next = claudeSessions.scan();
-  const sig = (list) => JSON.stringify(list.map((s) => [s.id, s.status, s.updatedAt]));
+  // 채널이 붙은 세션은 대시보드가 곁가지 없는 경로로 보낼 수 있다
+  for (const s of next) s.channel = channelHub.isConnected(s.id);
+  const sig = (list) => JSON.stringify(list.map((s) => [s.id, s.status, s.updatedAt, s.channel]));
   const changed = sig(next) !== sig(store.state.claude);
   store.state.claude = next;
   if (changed) store.pushState();
