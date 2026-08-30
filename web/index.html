@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FleetView</title>
+<link rel="stylesheet" href="/vendor/xterm.css">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -22,6 +23,17 @@
 </header>
 
 <main>
+  <!-- 창 없는 터미널 -->
+  <section class="pool">
+    <h2 class="sec-title">터미널
+      <span class="muted">— 창 없이 대시보드 안에서 도는 클로드</span>
+      <button id="btnNewPty" class="btn sm">+ 새 터미널</button>
+    </h2>
+    <div id="ptyTabs" class="pty-tabs"></div>
+    <div id="ptyWrap" class="pty-wrap hidden"><div id="ptyTerm"></div></div>
+    <div id="ptyEmpty" class="empty">아직 없습니다. <b>+ 새 터미널</b> 을 누르면 창 없이 클로드가 뜹니다.</div>
+  </section>
+
   <!-- 세션 풀 -->
   <section class="pool">
     <h2 class="sec-title">세션 <span class="muted">— 클릭하면 대화창, 화살표를 누르면 그 화면으로 이동</span></h2>
@@ -81,6 +93,8 @@
 </aside>
 <div id="scrim" class="scrim"></div>
 
+<script src="/vendor/xterm.js"></script>
+<script src="/vendor/addon-fit.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

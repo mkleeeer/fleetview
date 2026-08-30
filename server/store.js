@@ -25,6 +25,7 @@ const state = {
   codex: [],
   apps: [],
   adapters: [],
+  terminals: [],   // 창 없이 도는 터미널 세션
   busy: 0,        // 처리 중인 요청 수. 재시작 타이밍을 잡는 데 쓴다
   cards: [],
   workflows: [],
@@ -87,6 +88,7 @@ function snapshot() {
     codex: state.codex,
     apps: state.apps,
     adapters: state.adapters,
+    terminals: state.terminals,
     cards: state.cards,
     workflows: state.workflows,
     now: Date.now(),

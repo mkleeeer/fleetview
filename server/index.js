@@ -14,6 +14,7 @@ const adapters = require('./adapters');
 const channelHub = require('./channelHub');
 const launcher = require('./sessionLauncher');
 const windowFocus = require('./windowFocus');
+const ptyHost = require('./ptyHost');
 
 const PORT = Number(process.env.FLEET_PORT || 7777);
 const WEB = path.join(__dirname, '..', 'web');
@@ -110,6 +111,7 @@ function refreshClaude() {
       updatedAt: Date.now(), file: null,
     });
   }
+  store.state.terminals = ptyHost.list();
   const sig = (list) => JSON.stringify(list.map((s) => [s.id, s.status, s.updatedAt, s.channel]));
   const changed = sig(next) !== sig(store.state.claude);
   store.state.claude = next;
@@ -229,6 +231,33 @@ const server = http.createServer(async (req, res) => {
       const inner = 'cd /d "' + cwd + '" && claude --resume ' + sessionId;
       execFile('cmd', ['/c', 'start', '"Claude"', 'cmd', '/k', inner], { windowsHide: false }, () => {});
       return ok(res);
+    }
+
+    // --- 창 없는 터미널 (가짜 터미널) ---
+    if (p === '/api/pty/list') {
+      return ok(res, { available: ptyHost.available(), terminals: ptyHost.list() });
+    }
+    if (p === '/api/pty/create' && req.method === 'POST') {
+      const { cwd, resumeId, cols, rows } = await readBody(req);
+      try { return ok(res, ptyHost.create({ cwd, resumeId, cols, rows })); }
+      catch (e) { return json(res, 200, { ok: false, error: e.message }); }
+    }
+    if (p === '/api/pty/input' && req.method === 'POST') {
+      const { id, data } = await readBody(req);
+      try { ptyHost.write(id, data); return ok(res); }
+      catch (e) { return json(res, 200, { ok: false, error: e.message }); }
+    }
+    if (p === '/api/pty/resize' && req.method === 'POST') {
+      const { id, cols, rows } = await readBody(req);
+      ptyHost.resize(id, cols, rows);
+      return ok(res);
+    }
+    if (p === '/api/pty/buffer') {
+      return ok(res, { data: ptyHost.buffer(u.searchParams.get('id')) });
+    }
+    if (p === '/api/pty/kill' && req.method === 'POST') {
+      const { id } = await readBody(req);
+      return ok(res, { killed: ptyHost.kill(id) });
     }
 
     // --- 세션 바로가기 (그 창을 앞으로) ---

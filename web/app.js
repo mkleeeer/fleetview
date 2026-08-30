@@ -46,7 +46,7 @@ const STATUS_LABEL = {
 };
 
 // ---------------------------------------------------------------- 상태
-let S = { tabs: [], windows: [], claude: [], apps: [], adapters: [], cards: [], workflows: [], extOnline: false };
+let S = { tabs: [], windows: [], claude: [], apps: [], adapters: [], terminals: [], cards: [], workflows: [], extOnline: false };
 let drawer = null;   // { key, kind, ref, title, sub, provider }
 let busyKeys = new Set();
 let connState = 'connecting';
@@ -232,6 +232,103 @@ function renderLanes() {
       if (isOpen) for (const s of dead) body.appendChild(sessionCard(s));
     }
   }
+}
+
+
+// ---------------------------------------------------------------- 창 없는 터미널
+// node-pty 로 띄운 클로드의 화면을 여기서 그린다. 창이 뜨지 않고,
+// 시작 화면이나 권한 확인도 여기서 그대로 답할 수 있다.
+let term = null;
+let fit = null;
+let ptyId = null;
+
+function ensureTerm() {
+  if (term) return term;
+  term = new Terminal({
+    fontSize: 12,
+    fontFamily: 'ui-monospace, Consolas, "D2Coding", monospace',
+    theme: { background: '#0b0e13', foreground: '#e6edf3', cursor: '#4c8dff' },
+    cursorBlink: true,
+    scrollback: 5000,
+  });
+  fit = new FitAddon.FitAddon();
+  term.loadAddon(fit);
+  term.open(document.getElementById('ptyTerm'));
+  fit.fit();
+
+  // 대시보드에서 친 것을 그대로 그 세션에 보낸다
+  term.onData((d) => {
+    if (ptyId) api('/api/pty/input', { id: ptyId, data: d }).catch(() => {});
+  });
+
+  window.addEventListener('resize', () => {
+    if (!fit || !ptyId) return;
+    fit.fit();
+    api('/api/pty/resize', { id: ptyId, cols: term.cols, rows: term.rows }).catch(() => {});
+  });
+  return term;
+}
+
+async function attachPty(id) {
+  ptyId = id;
+  ensureTerm();
+  term.reset();
+  $('#ptyWrap').classList.remove('hidden');
+  $('#ptyEmpty').classList.add('hidden');
+  try {
+    const r = await api('/api/pty/buffer?id=' + encodeURIComponent(id));
+    if (r.data) term.write(r.data);
+  } catch {}
+  fit.fit();
+  api('/api/pty/resize', { id, cols: term.cols, rows: term.rows }).catch(() => {});
+  term.focus();
+  renderPty();
+}
+
+async function newPty() {
+  let folders = [];
+  try { folders = (await api('/api/session/folders')).folders; } catch {}
+  const NL = String.fromCharCode(10);
+  const list = folders.map((f, i) => (i + 1) + '. ' + f.name + '  (' + f.path + ')').join(NL);
+  const pick = prompt('창 없이 클로드를 띄웁니다.' + NL + NL
+    + '폴더 번호를 고르거나 경로를 직접 입력하세요.' + NL + NL + list, folders.length ? '1' : '');
+  if (!pick) return;
+  const n = Number(pick);
+  const cwd = (n >= 1 && n <= folders.length) ? folders[n - 1].path : pick.trim();
+
+  ensureTerm();
+  try {
+    const r = await api('/api/pty/create', { cwd, cols: term.cols || 120, rows: term.rows || 32 });
+    if (r.ok === false) throw new Error(r.error);
+    await attachPty(r.id);
+  } catch (e) { alertErr(e); }
+}
+
+function renderPty() {
+  const wrap = $('#ptyTabs');
+  if (!wrap) return;
+  const list = S.terminals || [];
+  wrap.textContent = '';
+  $('#ptyEmpty').classList.toggle('hidden', list.length > 0);
+  if (!list.length) { $('#ptyWrap').classList.add('hidden'); ptyId = null; return; }
+
+  for (const t of list) {
+    const tab = el('div', 'pty-tab' + (t.id === ptyId ? ' on' : ''));
+    const name = (t.cwd || '').split(/[\/]/).filter(Boolean).pop() || '?';
+    tab.appendChild(document.createTextNode(name));
+    const x = el('span', 'x', '×');
+    x.title = '이 터미널 닫기';
+    x.onclick = async (e) => {
+      e.stopPropagation();
+      await api('/api/pty/kill', { id: t.id }).catch(() => {});
+      if (ptyId === t.id) { ptyId = null; $('#ptyWrap').classList.add('hidden'); }
+    };
+    tab.appendChild(x);
+    tab.onclick = () => attachPty(t.id);
+    wrap.appendChild(tab);
+  }
+  // 열려 있는 게 있는데 아무것도 안 붙어 있으면 첫 번째를 붙인다
+  if (!ptyId && list.length) attachPty(list[0].id);
 }
 
 // ---------------------------------------------------------------- 렌더: 어댑터
@@ -644,6 +741,7 @@ function renderAll() {
 
   renderTop();
   renderAdapters();
+  renderPty();
   renderLanes();
   renderWindows();
 
@@ -659,6 +757,9 @@ function renderAll() {
 // ---------------------------------------------------------------- 이벤트 배선
 const adaptersToggle = document.getElementById('adaptersToggle');
 if (adaptersToggle) adaptersToggle.onclick = () => { adaptersOpen = !adaptersOpen; renderAdapters(); };
+
+const btnNewPty = document.getElementById('btnNewPty');
+if (btnNewPty) btnNewPty.onclick = newPty;
 
 const btnNewSession = document.getElementById('btnNewSession');
 if (btnNewSession) btnNewSession.onclick = () => launchSession(null);
@@ -708,6 +809,16 @@ function connect() {
     S = JSON.parse(ev.data);
     renderAll();
   });
+  es.addEventListener('pty', (ev) => {
+    const d = JSON.parse(ev.data);
+    if (term && d.id === ptyId) term.write(d.data);
+  });
+  es.addEventListener('pty-exit', (ev) => {
+    const d = JSON.parse(ev.data);
+    const CRLF = String.fromCharCode(13, 10);
+    if (term && d.id === ptyId) term.write(CRLF + '[세션이 끝났습니다]' + CRLF);
+  });
+
   es.addEventListener('delta', (ev) => {
     const d = JSON.parse(ev.data);
     if (!liveProgress || d.key !== liveProgress.key) return;
