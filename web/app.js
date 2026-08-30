@@ -102,41 +102,35 @@ function sessionCard(s) {
 
 /** 채널을 붙인 Claude Code 세션을 새로 띄운다 */
 async function launchSession(resumeId) {
+  const NL = String.fromCharCode(10);   // 소스에 이스케이프를 쓰지 않는다
+
   let folders = [];
   try { folders = (await api('/api/session/folders')).folders; } catch {}
 
-  const list = folders.map((f, i) => `${i + 1}. ${f.name}  (${f.path})`).join('
-');
+  const list = folders.map((f, i) => `${i + 1}. ${f.name}  (${f.path})`).join(NL);
+  const head = resumeId
+    ? '이 세션을 채널과 함께 다시 엽니다.'
+    : '새 Claude Code 세션을 채널과 함께 띄웁니다.';
   const pick = prompt(
-    (resumeId ? '이 세션을 채널과 함께 다시 엽니다.
-
-' : '새 Claude Code 세션을 채널과 함께 띄웁니다.
-
-')
-    + '폴더 번호를 고르거나 경로를 직접 입력하세요.
-
-' + list,
+    head + NL + NL + '폴더 번호를 고르거나 경로를 직접 입력하세요.' + NL + NL + list,
     folders.length ? '1' : '');
   if (!pick) return;
 
   const n = Number(pick);
   const cwd = (n >= 1 && n <= folders.length) ? folders[n - 1].path : pick.trim();
 
-  const note = el('div', 'msg sys', '창을 띄웠습니다. 시작 화면이 뜨면 넘겨 주세요…');
-  $('#chat').appendChild(note);
+  const btn = $('#btnNewSession');
+  const label = btn && btn.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = '띄우는 중…'; }
   try {
     const r = await api('/api/session/launch', { cwd, resumeId });
     if (r.ok === false) throw new Error(r.error);
-    alert('세션이 채널과 함께 시작됐습니다.
-
-' + r.sessionId
-      + '
-
-이제 대시보드에서 보내는 메시지가 그 창으로 바로 들어갑니다.');
+    alert('세션이 채널과 함께 시작됐습니다.' + NL + NL + r.sessionId + NL + NL
+      + '이제 대시보드에서 보내는 메시지가 그 창으로 바로 들어갑니다.');
   } catch (e) {
     alertErr(e);
   } finally {
-    note.remove();
+    if (btn) { btn.disabled = false; btn.textContent = label; }
   }
 }
 
