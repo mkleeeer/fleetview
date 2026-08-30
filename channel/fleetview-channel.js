@@ -162,14 +162,22 @@ async function register() {
 }
 
 async function pump() {
+  let lastRegister = 0;
   while (true) {
     let data;
     try {
-      const r = await fetch(SERVER + '/api/channel/poll?sessionId=' + encodeURIComponent(sessionId || ''));
+      // 반드시 시간 제한을 둔다. 서버가 롱폴링을 붙잡은 채로 죽으면 응답도 오류도
+      // 오지 않아 여기서 영원히 멈춰 버린다. 서버는 25초까지 붙잡으므로 그보다 넉넉히 준다.
+      const r = await fetch(SERVER + '/api/channel/poll?sessionId=' + encodeURIComponent(sessionId || ''),
+        { signal: AbortSignal.timeout(40000) });
       data = await r.json();
+
+      // 서버가 재시작됐을 수 있으니 가끔 등록을 다시 알린다
+      if (Date.now() - lastRegister > 60000) { lastRegister = Date.now(); register(); }
     } catch {
       await new Promise((r) => setTimeout(r, 3000));   // 서버가 꺼져 있으면 재시도
       await register();
+      lastRegister = Date.now();
       continue;
     }
     for (const m of (data && data.messages) || []) {
