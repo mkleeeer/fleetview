@@ -13,7 +13,7 @@
  *   1) 부모 프로세스를 거슬러 올라가 자기가 어느 세션에 속하는지 알아낸다
  *   2) FleetView 서버에 등록하고 롱폴링으로 보낼 메시지를 받아온다
  *   3) notifications/claude/channel 로 세션에 밀어넣는다
- *   4) Claude 가 reply 도구를 부르면 그 답을 FleetView 로 돌려보낸다
+ *   4) 답은 세션 기록에서 읽어 온다 (도구를 부르게 하지 않는다 — 턴이 하나 더 들기 때문)
  *
  * 실행:
  *   claude --dangerously-load-development-channels server:fleetview
@@ -26,10 +26,6 @@ const { execFileSync } = require('child_process');
 
 const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
-const {
-  ListToolsRequestSchema,
-  CallToolRequestSchema,
-} = require('@modelcontextprotocol/sdk/types.js');
 
 const SERVER = process.env.FLEET_URL || 'http://127.0.0.1:7777';
 const SESSIONS_DIR = path.join(os.homedir(), '.claude', 'sessions');
@@ -102,53 +98,17 @@ const mcp = new Server(
   {
     capabilities: {
       experimental: { 'claude/channel': {} },   // 이게 있어야 채널로 등록된다
-      tools: {},                                // 양방향(답장)을 위해 필요
+      // 답장 도구는 두지 않는다.
+      // 답은 세션 기록에서 읽어 오므로 도구가 할 일이 "끝났다" 신호뿐인데,
+      // 그 신호 하나에 모델 턴이 통째로 하나 더 든다(맥락 전체를 다시 읽는다).
+      // 2초 빨라지자고 치르기엔 비싸다.
     },
     instructions:
       'FleetView 대시보드에서 보낸 메시지가 <channel source="fleetview" msg_id="..."> 로 도착합니다. ' +
       '평소처럼 작업하고 평소처럼 답하세요. 화면에 쓴 답이 그대로 대시보드에도 보입니다. ' +
-      '답을 마친 뒤 fleetview_reply 도구를 한 번 호출해 끝났다고 알려 주세요. ' +
-      'text 에는 짧게 "완료" 정도만 넣어도 됩니다. 답 자체는 화면에 쓴 것이 쓰입니다. ' +
-      'msg_id 는 도착한 태그의 값을 그대로 넘기세요.',
+      '따로 보고하거나 도구를 부를 필요가 없습니다.',
   },
 );
-
-// ---------- 답장 도구 ---------------------------------------------------------
-mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [{
-    name: 'fleetview_reply',
-    description:
-      'FleetView 대시보드로 답을 돌려보낸다. 채널로 받은 메시지를 처리한 뒤 반드시 한 번 호출한다.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        msg_id: { type: 'string', description: '받은 <channel> 태그의 msg_id' },
-        text: { type: 'string', description: '대시보드에 표시할 답변' },
-      },
-      required: ['msg_id', 'text'],
-    },
-  }],
-}));
-
-mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
-  if (req.params.name !== 'fleetview_reply') {
-    throw new Error('알 수 없는 도구: ' + req.params.name);
-  }
-  const { msg_id, text } = req.params.arguments || {};
-  try {
-    await fetch(SERVER + '/api/channel/reply', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ sessionId, msgId: msg_id, text }),
-    });
-    return { content: [{ type: 'text', text: '대시보드로 전달했습니다.' }] };
-  } catch (e) {
-    return {
-      content: [{ type: 'text', text: 'FleetView 로 전달하지 못했습니다: ' + e.message }],
-      isError: true,
-    };
-  }
-});
 
 // ---------- FleetView 롱폴링 --------------------------------------------------
 async function register() {
