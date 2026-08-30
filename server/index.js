@@ -512,6 +512,13 @@ function watchSources() {
   // 안 그러면 사용자가 메시지를 보낸 순간 재시작이 걸려 답이 통째로 날아간다.
   function restartWhenIdle() {
     if (store.state.busy > 0) return setTimeout(restartWhenIdle, 1000);
+
+    // 터미널은 이 프로세스의 자식이라 서버가 내려가면 같이 죽는다.
+    // 쓰고 있는 터미널을 코드 저장 때문에 끊어 버리면 안 되므로 재시작을 미룬다.
+    if (ptyHost.list().length) {
+      console.log('[코드 변경] 터미널이 열려 있어 재시작을 미룹니다 (터미널을 닫으면 반영됩니다)');
+      return setTimeout(restartWhenIdle, 5000);
+    }
     console.log('[코드 변경] 다시 시작합니다');
 
     // 새 서버를 직접 띄우고 물러난다. 배치 파일이나 창이 필요 없다.

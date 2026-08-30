@@ -262,6 +262,35 @@ function replyTo(sessionId, msgId) {
   return { found: true, text: parts.join(SEP).trim(), closed, ended, steps };
 }
 
+const TRANSCRIPT_TAIL_BYTES = 512 * 1024;
+
+/**
+ * 대시보드 드로어용 대화 미리보기.
+ *
+ * 터미널에서 직접 주고받은 대화는 대시보드가 보낸 적이 없어 `store.transcripts`
+ * 에 안 남는다. 그래서 드로어를 열면 항상 "아직 주고받은 내용이 없습니다" 로 보였다.
+ * 여기서는 jsonl 꼬리를 직접 읽어 사람이 읽을 발화만 뽑아 같은 모양({role, text, at})
+ * 으로 돌려준다 — 저장하지 않고 매번 새로 읽으므로 터미널 진행 상황을 그대로 반영한다.
+ */
+function transcriptEntries(sessionId, { max = 300 } = {}) {
+  const file = findFile(sessionId);
+  if (!file) return [];
+  const tail = readTail(file, TRANSCRIPT_TAIL_BYTES);
+  if (!tail) return [];
+  const entries = parseLines(tail.text, { dropFirst: tail.truncated });
+  const out = [];
+  for (const e of entries) {
+    if (e.type === 'user') {
+      const t = textOf(e);
+      if (isRealUserText(t)) out.push({ role: 'user', text: t, at: Date.parse(e.timestamp) || Date.now() });
+    } else if (e.type === 'assistant') {
+      const t = textOf(e);
+      if (t) out.push({ role: 'assistant', text: t, at: Date.parse(e.timestamp) || Date.now() });
+    }
+  }
+  return out.length > max ? out.slice(out.length - max) : out;
+}
+
 /** 세션 id 로 기록 파일 경로를 찾는다 */
 function findFile(sessionId) {
   let projects;
