@@ -255,3 +255,11 @@ main { padding: 20px; display: flex; flex-direction: column; gap: 26px; max-widt
 .sec-toggle:hover { color: var(--accent); }
 .sec-toggle .muted, .sec-toggle .bad { font-weight: 400; font-size: 13px; margin-left: 4px; }
 .sec-toggle .bad { color: var(--err); }
+
+/* ---- 응답 진행 상황 ---- */
+.pending-head { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.progress { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.progress:empty { display: none; }
+.step { font-size: 12px; line-height: 1.45; }
+.step.tool { color: var(--accent); font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
+.step.text { color: var(--text); white-space: pre-wrap; }

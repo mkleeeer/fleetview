@@ -75,7 +75,7 @@ function hold(sid, res) {
  * 2번이 필요한 이유: 지시문에 "반드시 도구를 부르라" 고 써도 강제할 수 없다.
  * 짧은 대화일수록 그냥 화면에만 답하고 끝내는데, 그러면 대시보드가 영영 기다린다.
  */
-function send(sessionId, text) {
+function send(sessionId, text, onProgress) {
   if (!channels.has(sessionId)) {
     const e = new Error('이 세션에는 FleetView 채널이 붙어 있지 않습니다');
     e.code = 'unavailable';
@@ -111,9 +111,17 @@ function send(sessionId, text) {
     // 기록에서 찾아, 그 뒤부터 다음 사용자 발화 전까지만 모은다.
     let stable = 0;
     let seen = '';
+    let lastSteps = '';
     const watch = setInterval(() => {
       const r = sessions.replyTo(sessionId, id);
-      if (!r.found || !r.text) return;
+      if (!r.found) return;
+
+      // 진행 중인 것도 그때그때 알려준다. 코딩 세션이면 쓰는 도구가 실시간으로 보인다.
+      if (onProgress) {
+        const sig = JSON.stringify(r.steps);
+        if (sig !== lastSteps) { lastSteps = sig; onProgress(r.steps); }
+      }
+      if (!r.text) return;
 
       // 턴이 끝난 표시가 있으면 기다리지 않고 바로 확정한다.
       // closed: 다음 사용자 발화가 나타남 / ended: 답 뒤에 system 항목이 찍힘

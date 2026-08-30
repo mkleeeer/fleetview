@@ -28,7 +28,7 @@ const adapter = {
   label: 'Claude Code (채널)',
   kind: 'cli',
   agentType: 'coding',
-  capabilities: { streaming: false, tools: true, history: true, threads: true, createThread: false },
+  capabilities: { streaming: true, tools: true, history: true, threads: true, createThread: false },
   setupHint:
     '세션을 채널과 함께 시작해야 붙습니다:\n' +
     '  claude --dangerously-load-development-channels server:fleetview\n' +
@@ -56,7 +56,7 @@ const adapter = {
   },
 
   /** threadId 는 Claude Code 세션 id. 채널이 붙어 있어야 한다. */
-  async send({ threadId, text } = {}) {
+  async send({ threadId, text, onDelta } = {}) {
     if (!threadId) {
       throw new AdapterError('bad_request',
         '보낼 세션을 골라 주세요. 채널 어댑터는 새 세션을 만들지 않습니다.',
@@ -68,7 +68,9 @@ const adapter = {
         { provider: 'anthropic', adapterId: adapter.id });
     }
     try {
-      const r = await hub.send(threadId, text);
+      const r = await hub.send(threadId, text, (steps) => {
+        if (onDelta) onDelta(steps);
+      });
       return { text: r.text, threadId, usage: null, toolCalls: [] };
     } catch (e) {
       throw normalize(e);

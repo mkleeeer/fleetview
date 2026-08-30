@@ -50,7 +50,8 @@ let S = { tabs: [], windows: [], claude: [], apps: [], adapters: [], cards: [], 
 let drawer = null;   // { key, kind, ref, title, sub, provider }
 let busyKeys = new Set();
 let connState = 'connecting';
-let adaptersOpen = false;   // 연결 섹션은 기본으로 접어 둔다   // connecting | live | lost — 로딩과 고장을 구분하기 위해
+let adaptersOpen = false;
+let liveProgress = null;   // 진행 중인 응답을 그리는 자리   // 연결 섹션은 기본으로 접어 둔다   // connecting | live | lost — 로딩과 고장을 구분하기 위해
 
 // ---------------------------------------------------------------- 세션 목록 만들기
 function sessions() {
@@ -589,8 +590,13 @@ async function sendChat() {
   input.value = '';
   appendMsg({ role: 'user', text });
   const pending = el('div', 'msg assistant');
-  pending.appendChild(el('span', 'spinner'));
-  pending.appendChild(document.createTextNode(' 응답 기다리는 중…'));
+  const head = el('div', 'pending-head');
+  head.appendChild(el('span', 'spinner'));
+  head.appendChild(document.createTextNode(' 응답 기다리는 중…'));
+  pending.appendChild(head);
+  const prog = el('div', 'progress');
+  pending.appendChild(prog);
+  liveProgress = { key: drawer.key, node: prog, head };
   $('#chat').appendChild(pending);
   $('#chat').scrollTop = $('#chat').scrollHeight;
   busyKeys.add(drawer.key);
@@ -612,6 +618,7 @@ async function sendChat() {
     // /api/claude/send 는 reply, 어댑터 경로는 text 로 준다.
     appendMsg({ role: 'assistant', text: r.text || r.reply || '(빈 응답)' });
   } catch (e) {
+    liveProgress = null;
     pending.remove();
     appendMsg({ role: 'sys', text: '실패: ' + e.message });
   } finally {
@@ -701,6 +708,25 @@ function connect() {
     S = JSON.parse(ev.data);
     renderAll();
   });
+  es.addEventListener('delta', (ev) => {
+    const d = JSON.parse(ev.data);
+    if (!liveProgress || d.key !== liveProgress.key) return;
+    const steps = Array.isArray(d.chunk) ? d.chunk : null;
+    if (!steps) return;   // 문자 조각으로 오는 어댑터는 아직 여기서 다루지 않는다
+
+    liveProgress.node.textContent = '';
+    for (const s2 of steps) {
+      const row = el('div', 'step ' + s2.type);
+      row.textContent = s2.type === 'tool' ? ('· ' + s2.value) : s2.value;
+      liveProgress.node.appendChild(row);
+    }
+    const last = steps[steps.length - 1];
+    liveProgress.head.lastChild.textContent =
+      last && last.type === 'tool' ? ' ' + last.value + ' 실행 중…' : ' 작업 중…';
+    const chat = $('#chat');
+    chat.scrollTop = chat.scrollHeight;
+  });
+
   es.addEventListener('busy', (ev) => {
     const d = JSON.parse(ev.data);
     if (d.busy) busyKeys.add(d.key); else busyKeys.delete(d.key);

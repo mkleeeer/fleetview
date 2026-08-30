@@ -219,6 +219,7 @@ function liveSessions() {
  *   text   지금까지 모인 답
  *   closed 다음 사용자 발화가 나타나 턴이 확실히 끝났는가
  *   ended  답 뒤에 system 항목이 찍혔는가 (Claude Code 가 턴을 마무리한 표시)
+ *   steps  진행 순서 [{type:'text'|'tool', value}] — 실시간 표시용
  */
 function replyTo(sessionId, msgId) {
   const file = findFile(sessionId);
@@ -232,6 +233,7 @@ function replyTo(sessionId, msgId) {
   if (i < 0) return { found: false, text: '', closed: false };
 
   const parts = [];
+  const steps = [];        // 진행 상황을 실시간으로 보여주기 위한 것
   let closed = false;
   let sawAssistant = false;
   let ended = false;
@@ -247,7 +249,9 @@ function replyTo(sessionId, msgId) {
     }
     if (e.type === 'assistant') {
       const t = textOf(e);
-      if (t) { parts.push(t); sawAssistant = true; ended = false; }
+      if (t) { parts.push(t); steps.push({ type: 'text', value: t }); sawAssistant = true; ended = false; }
+      const tool = toolNameOf(e);
+      if (tool) { steps.push({ type: 'tool', value: tool }); sawAssistant = true; ended = false; }
       continue;
     }
     // Claude Code 는 한 턴이 끝나면 system 항목을 남긴다.
@@ -255,7 +259,7 @@ function replyTo(sessionId, msgId) {
     if (sawAssistant && e.type === 'system') ended = true;
   }
   const SEP = String.fromCharCode(10, 10);   // 소스에 이스케이프를 쓰지 않는다
-  return { found: true, text: parts.join(SEP).trim(), closed, ended };
+  return { found: true, text: parts.join(SEP).trim(), closed, ended, steps };
 }
 
 /** 세션 id 로 기록 파일 경로를 찾는다 */
