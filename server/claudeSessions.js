@@ -272,20 +272,45 @@ const TRANSCRIPT_TAIL_BYTES = 512 * 1024;
  * 여기서는 jsonl 꼬리를 직접 읽어 사람이 읽을 발화만 뽑아 같은 모양({role, text, at})
  * 으로 돌려준다 — 저장하지 않고 매번 새로 읽으므로 터미널 진행 상황을 그대로 반영한다.
  */
-function transcriptEntries(sessionId, { max = 300 } = {}) {
+/**
+ * 세션 기록을 대화 형태로 돌려준다.
+ *
+ * 터미널에서 직접 친 말과 대시보드에서 보낸 말이 한 세션에 같이 쌓인다.
+ * 대시보드에서 보낸 것은 <channel ...> 로 감싸여 있으니 껍질을 벗기고
+ * 어디서 왔는지만 표시해 둔다.
+ *
+ * 어시스턴트 발화는 한 턴이 여러 조각으로 쪼개져 들어오므로 이어 붙인다.
+ * 안 그러면 도구를 부를 때마다 말풍선이 하나씩 늘어난다.
+ */
+function transcriptEntries(sessionId, { max = 200 } = {}) {
   const file = findFile(sessionId);
   if (!file) return [];
   const tail = readTail(file, TRANSCRIPT_TAIL_BYTES);
   if (!tail) return [];
   const entries = parseLines(tail.text, { dropFirst: tail.truncated });
+
   const out = [];
+  const push = (role, text, at, via) => {
+    const last = out[out.length - 1];
+    if (last && last.role === role && role === 'assistant') {
+      last.text += String.fromCharCode(10, 10) + text;   // 같은 턴이면 이어 붙인다
+      last.at = at;
+      return;
+    }
+    out.push({ role, text, at, via: via || 'terminal' });
+  };
+
   for (const e of entries) {
+    const at = Date.parse(e.timestamp) || Date.now();
     if (e.type === 'user') {
       const t = textOf(e);
-      if (isRealUserText(t)) out.push({ role: 'user', text: t, at: Date.parse(e.timestamp) || Date.now() });
+      if (!t) continue;
+      const ch = t.match(/^<channel[^>]*>([\s\S]*?)<\/channel>\s*$/);
+      if (ch) { push('user', ch[1].trim(), at, 'fleetview'); continue; }
+      if (isRealUserText(t)) push('user', t, at);
     } else if (e.type === 'assistant') {
       const t = textOf(e);
-      if (t) out.push({ role: 'assistant', text: t, at: Date.parse(e.timestamp) || Date.now() });
+      if (t) push('assistant', t, at);
     }
   }
   return out.length > max ? out.slice(out.length - max) : out;
@@ -329,4 +354,4 @@ function scan() {
   return out;
 }
 
-module.exports = { scan, liveSessions, replyTo, ROOT };
+module.exports = { scan, liveSessions, replyTo, transcriptEntries, ROOT };

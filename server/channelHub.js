@@ -12,6 +12,8 @@ const sessions = require('./claudeSessions');
 
 const REPLY_TIMEOUT = 600000;   // 클로드는 오래 걸리는 작업을 할 수 있다
 const HOLD_MS = 25000;          // 롱폴링 유지 시간
+const REPLY_POLL_MS = 200;      // 터미널에 나온 답을 대시보드에도 거의 바로 반영한다
+const STABLE_POLLS = 5;         // 종료 표식이 없는 구버전도 약 1초 안정 후 확정한다
 
 // sessionId -> { sessionId, name, cwd, pid, lastSeen }
 const channels = new Map();
@@ -132,12 +134,12 @@ function send(sessionId, text, onProgress) {
       // 표시가 아직 없으면 변화가 멎을 때까지만 기다린다.
       if (r.text === seen) {
         stable++;
-        if (stable >= 3) finish(resolve, { text: r.text, sessionId, via: 'transcript' });
+        if (stable >= STABLE_POLLS) finish(resolve, { text: r.text, sessionId, via: 'transcript' });
       } else {
         seen = r.text;
         stable = 0;
       }
-    }, 700);
+    }, REPLY_POLL_MS);
 
     const timer = setTimeout(() => {
       const e = new Error('세션이 제한 시간 안에 답하지 않았습니다');

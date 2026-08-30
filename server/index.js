@@ -146,6 +146,13 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // 세션 기록 그대로 — 터미널에서 친 말과 대시보드에서 보낸 말이 한자리에 나온다
+    if (p === '/api/session/history') {
+      const sessionId = u.searchParams.get('sessionId');
+      if (!sessionId) return ok(res, { entries: [] });
+      return ok(res, { entries: claudeSessions.transcriptEntries(sessionId) });
+    }
+
     if (p === '/api/transcript') {
       const key = u.searchParams.get('key');
       return ok(res, { entries: store.state.transcripts[key] || [] });

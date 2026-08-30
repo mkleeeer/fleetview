@@ -653,16 +653,26 @@ async function openDrawer(s) {
     warn.textContent = '이 탭의 입력창에 직접 입력하고 전송합니다. 탭을 닫거나 이동시키지 마세요.';
     warn.classList.remove('hidden');
   }
-  await loadTranscript(s.key);
+  await loadTranscript(s);
 }
 
-async function loadTranscript(key) {
+/**
+ * 대화창을 채운다.
+ *
+ * 클로드 코드 세션은 세션 기록을 그대로 읽는다. 터미널에서 직접 친 말과
+ * 대시보드에서 보낸 말이 같은 세션에 쌓이므로, 양쪽이 한자리에 나온다.
+ * 나머지(탭, 앱)는 기록 파일이 없어 대시보드가 남긴 것만 보여준다.
+ */
+async function loadTranscript(s) {
   const chat = $('#chat');
   chat.textContent = '';
   try {
-    const j = await api('/api/transcript?key=' + encodeURIComponent(key));
+    const j = s.kind === 'claude-code'
+      ? await api('/api/session/history?sessionId=' + encodeURIComponent(s.ref))
+      : await api('/api/transcript?key=' + encodeURIComponent(s.key));
     if (!j.entries.length) {
-      const empty = el('div', 'msg sys', '아직 이 대시보드에서 주고받은 내용이 없습니다.');
+      const empty = el('div', 'msg sys',
+        s.kind === 'claude-code' ? '아직 오간 말이 없습니다.' : '아직 이 대시보드에서 주고받은 내용이 없습니다.');
       empty.id = 'chatEmpty';
       chat.appendChild(empty);
     }
@@ -675,6 +685,11 @@ function appendMsg(e) {
   const empty = document.getElementById('chatEmpty');
   if (empty) empty.remove();   // 대화가 생기면 안내문은 치운다
   const m = el('div', 'msg ' + e.role, e.text);
+  // 어디서 들어온 말인지 표시한다. 터미널과 대시보드가 같은 세션을 쓰기 때문에
+  // 표시가 없으면 내가 어느 쪽에서 쳤는지 알 수 없다.
+  if (e.role === 'user' && e.via) {
+    m.appendChild(el('span', 'via', e.via === 'fleetview' ? '대시보드' : '터미널'));
+  }
   chat.appendChild(m);
   chat.scrollTop = chat.scrollHeight;
 }
@@ -685,7 +700,7 @@ async function sendChat() {
   const text = input.value.trim();
   if (!text) return;
   input.value = '';
-  appendMsg({ role: 'user', text });
+  appendMsg({ role: 'user', text, via: 'fleetview' });
   const pending = el('div', 'msg assistant');
   const head = el('div', 'pending-head');
   head.appendChild(el('span', 'spinner'));

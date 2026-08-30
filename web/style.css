@@ -280,3 +280,11 @@ main { padding: 20px; display: flex; flex-direction: column; gap: 26px; max-widt
 }
 #ptyTerm { width: 100%; height: 100%; }
 .sec-title .btn.sm { margin-left: 8px; vertical-align: 1px; }
+
+/* 말풍선에 붙는 출처 표시 — 터미널에서 친 말과 대시보드에서 보낸 말을 구분한다 */
+.msg .via {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  opacity: .55;
+}
