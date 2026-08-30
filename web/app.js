@@ -35,6 +35,7 @@ const STATUS_LABEL = {
 let S = { tabs: [], windows: [], claude: [], apps: [], adapters: [], cards: [], workflows: [], extOnline: false };
 let drawer = null;   // { key, kind, ref, title, sub, provider }
 let busyKeys = new Set();
+let connState = 'connecting';   // connecting | live | lost — 로딩과 고장을 구분하기 위해
 
 // ---------------------------------------------------------------- 세션 목록 만들기
 function sessions() {
@@ -42,6 +43,7 @@ function sessions() {
   for (const c of S.claude) {
     out.push({
       key: 'cc:' + c.id, kind: 'claude-code', ref: c.id, provider: 'claude',
+      surface: 'app',
       title: c.title,
       sub: (c.channel ? '채널 · ' : '') + c.projectName + ' · ' + ago(c.updatedAt)
         + (c.lastTool ? ' · ' + c.lastTool : ''),
@@ -52,6 +54,7 @@ function sessions() {
     const unsupported = a.debugSupported === false;
     out.push({
       key: a.key, kind: 'app', ref: a.id, provider: a.provider,
+      surface: 'app',
       title: a.connected ? (a.title || a.label) : a.label,
       sub: unsupported ? '데스크톱 앱 · 연결 불가 (앱이 디버그 연결을 차단)'
         : a.connected ? '데스크톱 앱 · 연결됨'
@@ -60,10 +63,23 @@ function sessions() {
       updatedAt: Number.MAX_SAFE_INTEGER, detail: a,
     });
   }
+  for (const c of S.codex || []) {
+    const age = c.updatedAt ? Date.now() - c.updatedAt : Infinity;
+    out.push({
+      key: 'codex:' + c.id, kind: 'codex', ref: c.id, provider: 'chatgpt',
+      surface: 'app',
+      title: c.title,
+      sub: 'Codex · ' + (c.updatedAt ? ago(c.updatedAt) : '시각 모름'),
+      // Codex 는 실행 중인지 알 방법이 없어 최근 활동으로만 가른다
+      status: age < 30 * 60 * 1000 ? 'idle' : 'stale',
+      updatedAt: c.updatedAt || 0, detail: c,
+    });
+  }
   for (const t of S.tabs) {
     if (!t.provider) continue;
     out.push({
       key: 'tab:' + t.id, kind: 'tab', ref: t.id, provider: t.provider,
+      surface: 'tab',
       title: t.title || '(제목 없음)', sub: '크롬 탭' + (t.active ? ' · 활성' : ''),
       status: t.active ? 'active' : 'idle', updatedAt: 0, detail: t,
     });
@@ -73,6 +89,11 @@ function sessions() {
 
 // ---------------------------------------------------------------- 렌더: 상단
 function renderTop() {
+  const conn = $('#connPill');
+  if (conn) {
+    conn.textContent = { connecting: '연결 중…', live: '실시간', lost: '서버 끊김' }[connState];
+    conn.className = 'pill ' + (connState === 'live' ? 'on' : connState === 'lost' ? 'off' : '');
+  }
   const ext = $('#extPill');
   ext.textContent = S.extOnline ? '확장 연결됨' : '확장 미연결';
   ext.className = 'pill ' + (S.extOnline ? 'on' : 'off');
@@ -137,25 +158,56 @@ async function launchSession(resumeId) {
   }
 }
 
+const collapsed = new Set(['claude', 'gemini', 'chatgpt']);   // 지난 세션은 기본으로 접어 둔다
+const DEAD = new Set(['stale']);                              // 끝난 것으로 보는 상태
+
+function renderGroup(body, label, list) {
+  if (!list.length) return;
+  const head = el('div', 'grp', label);
+  head.appendChild(el('span', 'grp-n', String(list.length)));
+  body.appendChild(head);
+  for (const s of list) body.appendChild(sessionCard(s));
+}
+
 function renderLanes() {
   const all = sessions();
   for (const p of ['claude', 'gemini', 'chatgpt']) {
-    const body = $('#lane' + p[0].toUpperCase() + p.slice(1));
-    const list = all.filter((s) => s.provider === p)
-      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    const cap = p[0].toUpperCase() + p.slice(1);
+    const body = $('#lane' + cap);
+    const mine = all.filter((s) => s.provider === p);
     body.textContent = '';
-    $('#cnt' + p[0].toUpperCase() + p.slice(1)).textContent = list.length;
-    if (!list.length) {
-      const e = el('div', 'card-sub', p === 'claude'
-        ? 'Claude Code 세션이나 claude.ai 탭이 없습니다'
-        : PROVIDER_LABEL[p] + ' 탭을 열면 여기에 표시됩니다');
-      body.appendChild(e);
+    $('#cnt' + cap).textContent = mine.length;
+
+    const live = mine.filter((s) => !DEAD.has(s.status))
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    const dead = mine.filter((s) => DEAD.has(s.status))
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+    if (!mine.length) {
+      body.appendChild(el('div', 'card-sub',
+        connState !== 'live' ? '불러오는 중…'
+        : p === 'claude' ? 'Claude Code 세션이나 claude.ai 탭이 없습니다'
+        : PROVIDER_LABEL[p] + ' 탭을 열면 여기에 표시됩니다'));
       continue;
     }
-    for (const s of list) body.appendChild(sessionCard(s));
+
+    // 앱으로 하는 것 / 탭으로 하는 것
+    renderGroup(body, '앱', live.filter((s) => s.surface === 'app'));
+    renderGroup(body, '탭', live.filter((s) => s.surface === 'tab'));
+
+    if (dead.length) {
+      const isOpen = !collapsed.has(p);
+      const toggle = el('button', 'grp-toggle',
+        (isOpen ? '▾ ' : '▸ ') + '지난 세션 ' + dead.length + '개');
+      toggle.onclick = () => {
+        if (collapsed.has(p)) collapsed.delete(p); else collapsed.add(p);
+        renderLanes();
+      };
+      body.appendChild(toggle);
+      if (isOpen) for (const s of dead) body.appendChild(sessionCard(s));
+    }
   }
 }
-
 
 // ---------------------------------------------------------------- 렌더: 어댑터
 const KIND_NOTE = {
@@ -171,7 +223,9 @@ function renderAdapters() {
   wrap.textContent = '';
   const list = S.adapters || [];
   if (!list.length) {
-    wrap.appendChild(el('div', 'card-sub', '어댑터 상태를 불러오는 중…'));
+    wrap.appendChild(el('div', 'card-sub',
+      connState === 'lost' ? '서버와 연결이 끊겼습니다. 서버 창을 확인해 주세요.'
+        : '어댑터 상태를 불러오는 중…'));
     return;
   }
   for (const a of list) {
@@ -406,6 +460,11 @@ function showOutput(st) {
 async function jumpTo(s) {
   try {
     if (s.kind === 'tab') return void await api('/api/tab/focus', { tabId: s.ref });
+    if (s.kind === 'codex') {
+      const NL = String.fromCharCode(10);
+      return void alert('Codex 세션은 터미널에서 이어가세요:' + NL + NL
+        + 'codex exec resume ' + s.ref);
+    }
     if (s.kind === 'app') return void await api('/api/app/focus', { app: s.ref });
 
     // Claude Code 세션: 살아 있으면 그 창을 띄우고, 꺼져 있으면 이어서 연다.
@@ -441,6 +500,9 @@ async function openDrawer(s) {
       : s.detail.connected
       ? '데스크톱 앱의 대화창에 직접 입력하고 전송합니다.'
       : '앱이 아직 디버그 모드로 떠 있지 않습니다. 아래 「앱 연결」을 누르면 앱을 껐다 다시 띄웁니다. 대화 내용은 사라지지 않습니다.';
+    warn.classList.remove('hidden');
+  } else if (s.kind === 'codex') {
+    warn.textContent = 'Codex CLI 로 이 세션을 이어서 실행합니다. ChatGPT 구독을 그대로 쓰며 API 과금은 없습니다.';
     warn.classList.remove('hidden');
   } else if (s.kind === 'claude-code') {
     warn.textContent = s.detail.channel
@@ -487,7 +549,9 @@ async function sendChat() {
   busyKeys.add(drawer.key);
   renderLanes();
   try {
-    const r = drawer.kind === 'claude-code'
+    const r = drawer.kind === 'codex'
+      ? await api('/api/adapters/send', { id: 'codex-cli', threadId: drawer.ref, text })
+      : drawer.kind === 'claude-code'
       // 채널이 붙어 있으면 실행 중인 그 세션으로 직접 넣는다(곁가지 없음).
       // 없으면 예전 방식으로 새 프로세스를 띄운다.
       ? drawer.detail.channel
@@ -589,7 +653,11 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawe
 // ---------------------------------------------------------------- SSE
 function connect() {
   const es = new EventSource('/api/events');
-  es.addEventListener('state', (ev) => { S = JSON.parse(ev.data); renderAll(); });
+  es.addEventListener('state', (ev) => {
+    connState = 'live';
+    S = JSON.parse(ev.data);
+    renderAll();
+  });
   es.addEventListener('busy', (ev) => {
     const d = JSON.parse(ev.data);
     if (d.busy) busyKeys.add(d.key); else busyKeys.delete(d.key);
@@ -599,7 +667,12 @@ function connect() {
     const d = JSON.parse(ev.data);
     if (drawer && d.key === drawer.key) { /* 전송 흐름에서 이미 그렸으므로 생략 */ }
   });
-  es.onerror = () => { es.close(); setTimeout(connect, 2000); };
+  es.onerror = () => {
+    connState = 'lost';
+    renderTop();
+    es.close();
+    setTimeout(connect, 2000);
+  };
 }
 connect();
 setInterval(() => { if (S.claude.length) renderLanes(); }, 15000); // '몇 분 전' 갱신

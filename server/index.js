@@ -399,6 +399,18 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+async function refreshCodex() {
+  try {
+    const a = adapters.get('codex-cli');
+    if (!a) return;
+    const list = await a.listThreads();
+    const sig = (l) => JSON.stringify(l.map((x) => [x.id, x.updatedAt]));
+    const changed = sig(list) !== sig(store.state.codex);
+    store.state.codex = list;
+    if (changed) store.pushState();
+  } catch { /* codex 가 없거나 로그인 전 */ }
+}
+
 async function refreshAdapters() {
   try {
     const next = await adapters.describeAll();
@@ -435,6 +447,8 @@ refreshApps();
 setInterval(refreshApps, 5000);
 refreshAdapters();
 setInterval(refreshAdapters, 6000);
+refreshCodex();
+setInterval(refreshCodex, 10000);
 setInterval(refreshClaude, 3000);
 // 확장 온/오프라인 표시가 늦지 않도록 주기적으로 상태를 밀어준다
 setInterval(() => store.pushState(), 5000);
