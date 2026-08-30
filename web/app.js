@@ -35,7 +35,8 @@ const STATUS_LABEL = {
 let S = { tabs: [], windows: [], claude: [], apps: [], adapters: [], cards: [], workflows: [], extOnline: false };
 let drawer = null;   // { key, kind, ref, title, sub, provider }
 let busyKeys = new Set();
-let connState = 'connecting';   // connecting | live | lost — 로딩과 고장을 구분하기 위해
+let connState = 'connecting';
+let adaptersOpen = false;   // 연결 섹션은 기본으로 접어 둔다   // connecting | live | lost — 로딩과 고장을 구분하기 위해
 
 // ---------------------------------------------------------------- 세션 목록 만들기
 function sessions() {
@@ -220,8 +221,23 @@ const CAP_LABEL = { streaming: '스트리밍', tools: '도구', history: '이력
 function renderAdapters() {
   const wrap = $('#adapters');
   if (!wrap) return;
-  wrap.textContent = '';
   const list = S.adapters || [];
+
+  // 접힌 상태에서도 문제가 있으면 한 줄로 알 수 있게 요약한다
+  const summary = $('#adaptersSummary');
+  const caret = $('#adaptersCaret');
+  if (summary) {
+    const bad = list.filter((a) => !a.health.ok).length;
+    summary.textContent = !list.length ? ''
+      : bad ? `— ${list.length}개 중 ${bad}개 연결 안 됨`
+      : `— ${list.length}개 모두 연결됨`;
+    summary.className = bad ? 'bad' : 'muted';
+  }
+  if (caret) caret.textContent = adaptersOpen ? '▾' : '▸';
+  wrap.classList.toggle('hidden', !adaptersOpen);
+  if (!adaptersOpen) return;
+
+  wrap.textContent = '';
   if (!list.length) {
     wrap.appendChild(el('div', 'card-sub',
       connState === 'lost' ? '서버와 연결이 끊겼습니다. 서버 창을 확인해 주세요.'
@@ -610,6 +626,9 @@ $('#btnNewTask').onclick = async () => {
   await api('/api/wf/stage/add', { wfId: wf.id, name: '분석', prompt: '아래 수집 결과를 분석해줘.\n\n{{input}}' });
   await api('/api/wf/stage/add', { wfId: wf.id, name: '정리', prompt: '아래 분석을 바탕으로 최종본을 만들어줘.\n\n{{input}}' });
 };
+const adaptersToggle = document.getElementById('adaptersToggle');
+if (adaptersToggle) adaptersToggle.onclick = () => { adaptersOpen = !adaptersOpen; renderAdapters(); };
+
 const btnNewSession = document.getElementById('btnNewSession');
 if (btnNewSession) btnNewSession.onclick = () => launchSession(null);
 $('#drawerClose').onclick = closeDrawer;

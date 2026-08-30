@@ -32,12 +32,6 @@
     </div>
   </section>
 
-  <!-- 어댑터 -->
-  <section class="pool">
-    <h2 class="sec-title">연결 <span class="muted">— 모든 AI가 같은 규격으로 붙습니다</span></h2>
-    <div id="adapters" class="adapters"></div>
-  </section>
-
   <!-- 세션 풀 -->
   <section class="pool">
     <h2 class="sec-title">세션 <span class="muted">— 클릭하면 대화창, 화살표를 누르면 그 화면으로 이동</span></h2>
@@ -64,6 +58,15 @@
     <h2 class="sec-title">크롬 창 <span class="muted">— 지금 띄워둔 것들</span></h2>
     <div id="windows" class="windows"></div>
     <div id="winEmpty" class="empty">크롬 확장이 연결되면 여기에 창과 탭이 표시됩니다.</div>
+  </section>
+
+  <!-- 연결 (어댑터) — 자주 볼 일이 없어 접어 둔다 -->
+  <section class="pool">
+    <button id="adaptersToggle" class="sec-toggle">
+      <span id="adaptersCaret">▸</span> 연결
+      <span id="adaptersSummary" class="muted"></span>
+    </button>
+    <div id="adapters" class="adapters hidden"></div>
   </section>
 </main>
 

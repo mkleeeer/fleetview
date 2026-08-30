@@ -246,3 +246,12 @@ main { padding: 20px; display: flex; flex-direction: column; gap: 26px; max-widt
   border-top: 1px solid var(--line); margin-top: 6px; width: 100%;
 }
 .grp-toggle:hover { color: var(--text); }
+
+/* ---- 접히는 섹션 머리 ---- */
+.sec-toggle {
+  background: none; border: none; color: var(--text); cursor: pointer;
+  font-size: 14px; font-weight: 600; padding: 0 0 10px; text-align: left; width: 100%;
+}
+.sec-toggle:hover { color: var(--accent); }
+.sec-toggle .muted, .sec-toggle .bad { font-weight: 400; font-size: 13px; margin-left: 4px; }
+.sec-toggle .bad { color: var(--err); }
