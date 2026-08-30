@@ -100,6 +100,46 @@ function sessionCard(s) {
   return card;
 }
 
+/** 채널을 붙인 Claude Code 세션을 새로 띄운다 */
+async function launchSession(resumeId) {
+  let folders = [];
+  try { folders = (await api('/api/session/folders')).folders; } catch {}
+
+  const list = folders.map((f, i) => `${i + 1}. ${f.name}  (${f.path})`).join('
+');
+  const pick = prompt(
+    (resumeId ? '이 세션을 채널과 함께 다시 엽니다.
+
+' : '새 Claude Code 세션을 채널과 함께 띄웁니다.
+
+')
+    + '폴더 번호를 고르거나 경로를 직접 입력하세요.
+
+' + list,
+    folders.length ? '1' : '');
+  if (!pick) return;
+
+  const n = Number(pick);
+  const cwd = (n >= 1 && n <= folders.length) ? folders[n - 1].path : pick.trim();
+
+  const note = el('div', 'msg sys', '창을 띄웠습니다. 시작 화면이 뜨면 넘겨 주세요…');
+  $('#chat').appendChild(note);
+  try {
+    const r = await api('/api/session/launch', { cwd, resumeId });
+    if (r.ok === false) throw new Error(r.error);
+    alert('세션이 채널과 함께 시작됐습니다.
+
+' + r.sessionId
+      + '
+
+이제 대시보드에서 보내는 메시지가 그 창으로 바로 들어갑니다.');
+  } catch (e) {
+    alertErr(e);
+  } finally {
+    note.remove();
+  }
+}
+
 function renderLanes() {
   const all = sessions();
   for (const p of ['claude', 'gemini', 'chatgpt']) {
@@ -383,8 +423,11 @@ async function openDrawer(s) {
   const goBtn = $('#drawerGo');
   const unsupported = s.kind === 'app' && s.detail.debugSupported === false;
   const needConnect = s.kind === 'app' && !s.detail.connected && !unsupported;
+  const needChannel = s.kind === 'claude-code' && !s.detail.channel;
   goBtn.textContent = unsupported ? 'claude.ai 탭 열기'
-    : needConnect ? '앱 연결' : '→ 이 화면으로 이동';
+    : needConnect ? '앱 연결'
+    : needChannel ? '채널로 다시 열기'
+    : '→ 이 화면으로 이동';
   goBtn.className = (unsupported || needConnect) ? 'btn primary' : 'btn';
   $('#chatSend').disabled = needConnect || (unsupported && !s.detail.connected);
   const warn = $('#drawerWarn');
@@ -499,10 +542,15 @@ $('#btnNewTask').onclick = async () => {
   await api('/api/wf/stage/add', { wfId: wf.id, name: '분석', prompt: '아래 수집 결과를 분석해줘.\n\n{{input}}' });
   await api('/api/wf/stage/add', { wfId: wf.id, name: '정리', prompt: '아래 분석을 바탕으로 최종본을 만들어줘.\n\n{{input}}' });
 };
+const btnNewSession = document.getElementById('btnNewSession');
+if (btnNewSession) btnNewSession.onclick = () => launchSession(null);
 $('#drawerClose').onclick = closeDrawer;
 $('#scrim').onclick = closeDrawer;
 $('#drawerGo').onclick = async () => {
   if (!drawer) return;
+  if (drawer.kind === 'claude-code' && !drawer.detail.channel) {
+    return launchSession(drawer.ref);
+  }
   if (drawer.kind === 'app' && drawer.detail.debugSupported === false) {
     try {
       await api('/api/tab/open', { url: 'https://claude.ai/' });

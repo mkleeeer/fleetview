@@ -42,7 +42,9 @@
     <h2 class="sec-title">세션 <span class="muted">— 클릭하면 대화창, 화살표를 누르면 그 화면으로 이동</span></h2>
     <div class="lanes">
       <div class="lane" data-p="claude">
-        <div class="lane-head"><span class="dot claude"></span>클로드<span id="cntClaude" class="count">0</span></div>
+        <div class="lane-head"><span class="dot claude"></span>클로드
+          <button id="btnNewSession" class="btn sm" title="채널을 붙인 새 세션을 띄웁니다">+ 세션</button>
+          <span id="cntClaude" class="count">0</span></div>
         <div class="lane-body" id="laneClaude"></div>
       </div>
       <div class="lane" data-p="gemini">

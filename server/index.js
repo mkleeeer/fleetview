@@ -12,6 +12,7 @@ const claudeSessions = require('./claudeSessions');
 const appBridge = require('./appBridge');
 const adapters = require('./adapters');
 const channelHub = require('./channelHub');
+const launcher = require('./sessionLauncher');
 
 const PORT = Number(process.env.FLEET_PORT || 7777);
 const WEB = path.join(__dirname, '..', 'web');
@@ -188,6 +189,19 @@ const server = http.createServer(async (req, res) => {
       const inner = 'cd /d "' + cwd + '" && claude --resume ' + sessionId;
       execFile('cmd', ['/c', 'start', '"Claude"', 'cmd', '/k', inner], { windowsHide: false }, () => {});
       return ok(res);
+    }
+
+    // --- 세션 시작 (채널을 붙여서 띄운다) ---
+    if (p === '/api/session/folders') {
+      return ok(res, { folders: launcher.knownFolders() });
+    }
+    if (p === '/api/session/launch' && req.method === 'POST') {
+      const { cwd, resumeId } = await readBody(req);
+      try {
+        return ok(res, await launcher.launch({ cwd, resumeId }));
+      } catch (e) {
+        return json(res, 200, { ok: false, error: e.message, code: e.code || 'internal' });
+      }
     }
 
     // --- Claude Code 채널 (실행 중 세션에 직접 주입) ---

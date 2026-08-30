@@ -60,6 +60,8 @@ Node 18 이상. `@anthropic-ai/sdk` 하나만 의존합니다 (`npm install`).
 |---|---|---|---|---|
 | `anthropic-api` | api | `ANTHROPIC_API_KEY` | 어댑터가 보관 | O |
 | `claude-code` | cli | claude CLI 로그인 | `~/.claude/projects` | O |
+| `claude-channel` | cli | claude CLI 로그인 | 실행 중 세션 | X |
+| `codex-cli` | cli | ChatGPT 구독 | `~/.codex/sessions` | O |
 | `claude-tab` | ui | 브라우저 세션 | claude.ai | X |
 | `gemini-tab` | ui | 브라우저 세션 | gemini.google.com | X |
 | `chatgpt-tab` | ui | 브라우저 세션 | chatgpt.com | X |
@@ -106,6 +108,50 @@ Claude: refusing to start - a debugging or network-override switch is present on
 앱에 들어있는 보호 장치라 우회하지 않습니다. Claude 는 `claude-code`(구독 그대로),
 `anthropic-api`(별도 과금), `claude-tab`(구독 그대로) 세 어댑터로 붙습니다.
 
+### Claude Code 세션 — 채널로 붙이기 (권장)
+
+`claude -p --resume` 는 **새 프로세스**를 띄웁니다. 그 세션이 터미널에 열려 있으면
+두 프로세스가 각자 대화를 소유해 기록이 곁가지로 갈라집니다.
+
+채널은 **이미 돌고 있는 세션에 직접** 메시지를 넣습니다. 주인이 하나라 갈라지지 않습니다.
+
+**설치 (한 번만)**
+
+```bash
+claude mcp add --scope user fleetview -- node <경로>/fleetview/channel/fleetview-channel.js
+```
+
+**세션 띄우기 — 대시보드에서**
+
+클로드 레인의 **`+ 세션`** 버튼 → 폴더 선택 → 채널이 붙은 창이 뜹니다.
+기존 세션을 채널로 바꾸려면 그 카드를 눌러 **`채널로 다시 열기`** 를 누르세요.
+
+**직접 띄우려면**
+
+```bash
+claude --dangerously-load-development-channels server:fleetview
+claude --resume <세션id> --dangerously-load-development-channels server:fleetview
+```
+
+채널이 붙은 세션은 카드에 `채널 ·` 이 표시되고, 대시보드가 자동으로 그 경로로 보냅니다.
+안 붙은 세션은 예전 방식으로 가며, 곁가지가 생긴다는 경고가 드로어에 뜹니다.
+
+**제약**
+- 이미 떠 있는 세션에는 나중에 못 붙입니다. 세션당 최초 1회 재시작이 필요합니다.
+- 채널은 리서치 프리뷰라 커스텀 채널에 `--dangerously-load-development-channels` 가 필요합니다.
+
+### ChatGPT — Codex CLI (권장)
+
+ChatGPT 구독 로그인을 그대로 씁니다. API 키가 필요 없습니다.
+
+```bash
+codex login          # 한 번만
+```
+
+세션 목록은 `~/.codex/session_index.jsonl` 에서 읽고,
+`codex exec` / `codex exec resume <id>` 로 새 세션과 기존 세션을 다룹니다.
+화면 조종(`chatgpt-tab` / `chatgpt-app`)보다 이쪽이 안정적입니다.
+
 ### 작업(워크플로우)
 1. **+ 새 작업** → 이름 입력 (기본 3단계가 생깁니다)
 2. 각 단계에서 담당을 고릅니다: Claude Code 세션 / 데스크톱 앱 / 크롬 탭 / 사람이 직접
@@ -125,11 +171,17 @@ server/
   bridge.js         크롬 확장 롱폴링 명령 큐
   cdp.js            최소 Chrome DevTools Protocol 클라이언트 (내장 WebSocket)
   appBridge.js      ChatGPT 앱 기동·제어, 조상 프로세스 안전장치
+  channelHub.js     채널 세션별 큐 / 롱폴링 / 답장 매칭
+  sessionLauncher.js 채널을 붙여 세션을 띄운다 (환경변수 정리 포함)
   adapters/
     contract.js     공통 규격, AdapterError, 등록소
     anthropic.js    Anthropic 공식 API (@anthropic-ai/sdk)
     claudeCode.js   claude CLI 래퍼
     browserUi.js    크롬 탭 / ChatGPT 앱 UI 자동화
+    codexCli.js     Codex CLI (ChatGPT 구독)
+    claudeChannel.js 실행 중 Claude 세션에 직접 주입
+channel/
+  fleetview-channel.js  Claude Code 채널 (stdio MCP 서버)
 extension/pageAgent.js  페이지 조작 코드 — 확장과 서버(CDP)가 같은 파일을 공유
 extension/          크롬 확장 (탭 보고 + 페이지 조작)
 web/                대시보드 UI
