@@ -16,9 +16,13 @@ node server/index.js
 **`start.cmd`** 를 더블클릭하면 창이 뜬 채로 돕니다. 죽어도 3초 뒤 자동으로 다시 뜨고,
 기록은 `fleetview.log` 에 쌓입니다. 브라우저에서 http://localhost:7777 로 접속하세요.
 
-코드를 고친 뒤 반영하려면 **`restart.cmd`** 를 더블클릭하세요.
-서버 창에서 `Ctrl+C` 를 누르면 `Terminate batch job (Y/N)?` 이 뜨는데,
-`Y` 는 서버를 완전히 끄고 `N` 이라야 재시작됩니다. 헷갈리므로 `restart.cmd` 를 쓰세요.
+**코드를 고쳐도 따로 할 일이 없습니다.** 서버가 `server/`, `channel/` 의 변경을
+감지해 스스로 종료하고, `start.cmd` 의 루프가 3초 뒤 새 코드로 다시 띄웁니다(총 4초쯤).
+브라우저도 캐시 방지가 걸려 있어 `F5` 만 하면 됩니다.
+
+수동으로 다시 띄워야 할 때만 **`restart.cmd`** 를 쓰세요.
+서버 창에서 `Ctrl+C` 는 쓰지 마세요 — `Terminate batch job (Y/N)?` 에서
+`Y` 를 누르면 재시작 루프까지 끝나 서버가 완전히 꺼집니다.
 
 Node 18 이상. `@anthropic-ai/sdk` 하나만 의존합니다 (`npm install`).
 

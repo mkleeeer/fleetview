@@ -471,6 +471,24 @@ setInterval(refreshClaude, 3000);
 // 확장 온/오프라인 표시가 늦지 않도록 주기적으로 상태를 밀어준다
 setInterval(() => store.pushState(), 5000);
 
+// 서버 코드가 바뀌면 스스로 종료한다. start.cmd 의 루프가 3초 뒤 새 코드로 다시 띄운다.
+// 사람이 재시작을 신경 쓰지 않아도 되도록 하기 위한 것이다.
+function watchSources() {
+  const dirs = [__dirname, path.join(__dirname, 'adapters'), path.join(__dirname, '..', 'channel')];
+  let closing = false;
+  for (const dir of dirs) {
+    try {
+      fs.watch(dir, (evt, name) => {
+        if (closing || !name || !name.endsWith('.js')) return;
+        closing = true;
+        console.log(`[코드 변경] ${name} — 다시 시작합니다`);
+        setTimeout(() => process.exit(0), 400);   // 저장이 끝날 시간을 준다
+      });
+    } catch { /* 폴더가 없으면 넘어간다 */ }
+  }
+}
+watchSources();
+
 server.on('error', (e) => {
   if (e.code === 'EADDRINUSE') {
     console.error(`포트 ${PORT} 를 이미 쓰고 있습니다. 기존 FleetView 가 떠 있는지 확인하세요.`);
