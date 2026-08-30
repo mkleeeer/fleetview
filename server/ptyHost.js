@@ -32,6 +32,49 @@ function cleanEnv() {
   return env;
 }
 
+/**
+ * 시작 화면을 대신 넘겨 준다.
+ *
+ * 두 창이 뜨는데 기본 선택이 서로 반대다.
+ *  1) 폴더 신뢰 확인 — 기본이 "No, exit". 아래로 한 칸 내려야 "Yes, I trust this folder".
+ *  2) 개발 채널 경고 — 기본이 이미 "1. I am using this for local development". 엔터만.
+ * 여기서 아래로를 잘못 보내면 "Exit" 가 골라져 세션이 그대로 죽는다.
+ *
+ * 지금 어느 창이 떠 있는지는 버퍼에 마지막으로 나온 쪽으로 판단한다. 화면을 지워도
+ * 예전 글자가 버퍼에 남아 있어서, 단순히 "글자가 있나" 로 보면 지나간 창을 또 누른다.
+ *
+ * 글자는 커서 이동 코드가 섞여 공백이 사라지므로 공백을 모두 지우고 견준다.
+ */
+const ANSI = /\x1b\[[0-9;?]*[a-zA-Z]/g;
+const DOWN = String.fromCharCode(27) + '[B';
+const ENTER = String.fromCharCode(13);
+
+function autoAnswer(s) {
+  if (s.autoTimer || s.autoDone) return;
+  const seen = s.buf.replace(ANSI, '').replace(/\s+/g, '');
+  if (!/Yes,Itrustthisfolder|Iamusingthisforlocaldevelopment/i.test(seen)) return;
+
+  const stop = () => { clearInterval(s.autoTimer); s.autoTimer = null; s.autoDone = true; };
+  let quietUntil = 0;
+  let tries = 0;
+
+  s.autoTimer = setInterval(() => {
+    if (/Claude Code v/.test(s.buf)) return stop();
+    if (Date.now() - s.startedAt > 90000 || tries > 8) return stop();
+    if (Date.now() < quietUntil) return;
+
+    const flat = s.buf.replace(ANSI, '').replace(/\s+/g, '');
+    const trust = flat.lastIndexOf('Yes,Itrustthisfolder');
+    const dev = flat.lastIndexOf('Iamusingthisforlocaldevelopment');
+    if (trust < 0 && dev < 0) return;
+
+    tries++;
+    quietUntil = Date.now() + 5000;   // 눌렀으면 화면이 바뀔 때까지 기다린다
+    const keys = trust > dev ? [DOWN, ENTER] : [ENTER];
+    keys.forEach((k, i) => setTimeout(() => { try { s.proc.write(k); } catch {} }, i * 250));
+  }, 1200);
+}
+
 function append(s, data) {
   s.buf += data;
   if (s.buf.length > BUFFER_BYTES) s.buf = s.buf.slice(-BUFFER_BYTES);
@@ -61,27 +104,13 @@ function create({ cwd, resumeId, channel = true, cols = 120, rows = 32 } = {}) {
   proc.onData((data) => {
     append(s, data);
 
-    // 개발 채널 경고를 자동으로 넘긴다.
-    //
-    // 판단 기준을 "경고가 보이면 누른다" 로 잡으면 안 된다. TUI 가 화면을 계속 다시
-    // 그려서 그 문구가 최근 버퍼에서 밀려나면 재시도를 영영 멈춘다.
-    // 대신 "클로드 배너가 뜰 때까지 누른다" 로 잡는다.
-    if (!s.autoAnswered && /I am using this for local development/.test(s.buf)) {
-      s.autoAnswered = true;
-      let tries = 0;
-      const press = () => {
-        if (tries++ > 8) return;
-        if (/Claude Code v/.test(s.buf)) return;   // 넘어갔다
-        try { proc.write(String.fromCharCode(13)); } catch {}
-        setTimeout(press, 1500);
-      };
-      setTimeout(press, 1500);
-    }
+    autoAnswer(s);
 
     store.broadcast('pty', { id, data });
   });
 
   proc.onExit((e) => {
+    if (s.autoTimer) clearInterval(s.autoTimer);
     store.broadcast('pty-exit', { id, code: e.exitCode });
     sessions.delete(id);
   });
@@ -106,6 +135,7 @@ function resize(id, cols, rows) {
 function kill(id) {
   const s = sessions.get(id);
   if (!s) return false;
+  if (s.autoTimer) clearInterval(s.autoTimer);
   try { s.proc.kill(); } catch {}
   sessions.delete(id);
   store.pushState();
