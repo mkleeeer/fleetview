@@ -80,8 +80,12 @@ async function launch({ cwd, resumeId } = {}) {
   ].join(CRLF), 'utf8');
 
   // start 로 별도 콘솔 창을 띄운다. 사용자가 그 창에서 직접 이어서 작업할 수 있다.
-  // start 에 배치 파일만 넘긴다. /D 나 중첩 cmd /k 를 붙이면 창이 안 뜬다.
-  const child = spawn('cmd.exe', ['/c', 'start', '""', script], {
+  // 탐색기를 통해 띄운다.
+  //
+  // cmd /c start 로 띄우면 FleetView 서버가 숨김 창으로 실행 중일 때 자식 콘솔도
+  // 화면에 나오지 않는다. explorer 는 사용자의 대화형 세션에서 새로 실행해 주므로
+  // 서버가 어떤 창 상태로 떠 있든 정상적인 창이 열린다.
+  const child = spawn('explorer.exe', [script], {
     env: cleanEnv(),
     detached: true,
     stdio: 'ignore',
