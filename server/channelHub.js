@@ -115,10 +115,13 @@ function send(sessionId, text) {
       const r = sessions.replyTo(sessionId, id);
       if (!r.found || !r.text) return;
 
-      // 다음 사용자 발화가 나타났으면 턴이 확실히 끝난 것이다. 바로 확정한다.
-      if (r.closed) return finish(resolve, { text: r.text, sessionId, via: 'transcript' });
+      // 턴이 끝난 표시가 있으면 기다리지 않고 바로 확정한다.
+      // closed: 다음 사용자 발화가 나타남 / ended: 답 뒤에 system 항목이 찍힘
+      if (r.closed || r.ended) {
+        return finish(resolve, { text: r.text, sessionId, via: 'transcript' });
+      }
 
-      // 아직 진행 중일 수 있으니 잠시 변화가 없을 때까지 기다린다.
+      // 표시가 아직 없으면 변화가 멎을 때까지만 기다린다.
       if (r.text === seen) {
         stable++;
         if (stable >= 3) finish(resolve, { text: r.text, sessionId, via: 'transcript' });
@@ -126,7 +129,7 @@ function send(sessionId, text) {
         seen = r.text;
         stable = 0;
       }
-    }, 1500);
+    }, 700);
 
     const timer = setTimeout(() => {
       const e = new Error('세션이 제한 시간 안에 답하지 않았습니다');

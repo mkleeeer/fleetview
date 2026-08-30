@@ -218,6 +218,7 @@ function liveSessions() {
  *   found  그 메시지를 기록에서 찾았는가
  *   text   지금까지 모인 답
  *   closed 다음 사용자 발화가 나타나 턴이 확실히 끝났는가
+ *   ended  답 뒤에 system 항목이 찍혔는가 (Claude Code 가 턴을 마무리한 표시)
  */
 function replyTo(sessionId, msgId) {
   const file = findFile(sessionId);
@@ -232,20 +233,29 @@ function replyTo(sessionId, msgId) {
 
   const parts = [];
   let closed = false;
+  let sawAssistant = false;
+  let ended = false;
   for (let j = i + 1; j < entries.length; j++) {
     const e = entries[j];
     if (e.type === 'user') {
-      // 다음 사용자 발화를 만나면 이 턴은 끝난 것이다.
-      // 단 도구 결과는 user 타입으로 기록되므로 실제 발화만 경계로 본다.
-      if (isRealUserText(textOf(e))) { closed = true; break; }
+      const t = textOf(e);
+      // 다음 입력을 만나면 이 턴은 끝난 것이다.
+      // 사람이 직접 친 것뿐 아니라 뒤이어 들어온 채널 메시지도 경계로 봐야 한다.
+      // 안 그러면 다음 턴의 답까지 같이 딸려온다.
+      if (isRealUserText(t) || t.startsWith('<channel')) { closed = true; break; }
+      continue;   // 도구 결과는 user 타입으로 기록되므로 건너뛴다
+    }
+    if (e.type === 'assistant') {
+      const t = textOf(e);
+      if (t) { parts.push(t); sawAssistant = true; ended = false; }
       continue;
     }
-    if (e.type !== 'assistant') continue;
-    const t = textOf(e);
-    if (t) parts.push(t);
+    // Claude Code 는 한 턴이 끝나면 system 항목을 남긴다.
+    // 이걸 보면 안정될 때까지 기다리지 않고 바로 확정할 수 있다.
+    if (sawAssistant && e.type === 'system') ended = true;
   }
   const SEP = String.fromCharCode(10, 10);   // 소스에 이스케이프를 쓰지 않는다
-  return { found: true, text: parts.join(SEP).trim(), closed };
+  return { found: true, text: parts.join(SEP).trim(), closed, ended };
 }
 
 /** 세션 id 로 기록 파일 경로를 찾는다 */
