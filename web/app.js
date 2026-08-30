@@ -46,7 +46,7 @@ function sessions() {
       key: 'cc:' + c.id, kind: 'claude-code', ref: c.id, provider: 'claude',
       surface: 'app',
       title: c.title,
-      sub: (c.channel ? '채널 · ' : '') + c.projectName + ' · ' + ago(c.updatedAt)
+      sub: (c.channel ? '● 연결됨 · ' : '') + c.projectName + ' · ' + ago(c.updatedAt)
         + (c.lastTool ? ' · ' + c.lastTool : ''),
       status: c.status, updatedAt: c.updatedAt, detail: c,
     });
@@ -134,8 +134,8 @@ async function launchSession(resumeId) {
 
   const list = folders.map((f, i) => `${i + 1}. ${f.name}  (${f.path})`).join(NL);
   const head = resumeId
-    ? '이 세션을 채널과 함께 다시 엽니다.'
-    : '새 Claude Code 세션을 채널과 함께 띄웁니다.';
+    ? '이 세션을 새 창에서 다시 엽니다. 그 창은 대시보드와 연결됩니다.'
+    : '새 클로드 창을 띄웁니다. 그 창은 대시보드와 연결됩니다.';
   const pick = prompt(
     head + NL + NL + '폴더 번호를 고르거나 경로를 직접 입력하세요.' + NL + NL + list,
     folders.length ? '1' : '');
@@ -150,8 +150,8 @@ async function launchSession(resumeId) {
   try {
     const r = await api('/api/session/launch', { cwd, resumeId });
     if (r.ok === false) throw new Error(r.error);
-    alert('세션이 채널과 함께 시작됐습니다.' + NL + NL + r.sessionId + NL + NL
-      + '이제 대시보드에서 보내는 메시지가 그 창으로 바로 들어갑니다.');
+    alert('창이 열렸고 대시보드와 연결됐습니다.' + NL + NL
+      + '이제 여기서 보내는 메시지가 그 창에 바로 뜹니다.');
   } catch (e) {
     alertErr(e);
   } finally {
@@ -505,7 +505,7 @@ async function openDrawer(s) {
   const needChannel = s.kind === 'claude-code' && !s.detail.channel;
   goBtn.textContent = unsupported ? 'claude.ai 탭 열기'
     : needConnect ? '앱 연결'
-    : needChannel ? '채널로 다시 열기'
+    : needChannel ? '창과 연결하기'
     : '→ 이 화면으로 이동';
   goBtn.className = (unsupported || needConnect) ? 'btn primary' : 'btn';
   $('#chatSend').disabled = needConnect || (unsupported && !s.detail.connected);
@@ -522,9 +522,10 @@ async function openDrawer(s) {
     warn.classList.remove('hidden');
   } else if (s.kind === 'claude-code') {
     warn.textContent = s.detail.channel
-      ? '이 세션에는 채널이 붙어 있습니다. 보낸 메시지가 실행 중인 그 창으로 바로 들어가고, 답도 그 창에 남습니다.'
-      : '이 세션에는 채널이 붙어 있지 않습니다. 여기서 보내면 새 프로세스가 떠서 답이 이 창에만 남고 세션 기록에는 곁가지로 갈라집니다. '
-        + '갈라지지 않게 하려면 그 세션을 채널과 함께 다시 시작하세요: claude --resume <세션id> --dangerously-load-development-channels server:fleetview';
+      ? '열려 있는 창과 연결됨 — 여기서 보내면 그 창에 바로 뜨고, 답도 거기 남습니다.'
+      : '창과 연결 안 됨 — 여기서 보내면 클로드가 따로 하나 실행돼서 답합니다. '
+        + '열려 있는 창에는 안 뜨고 답이 여기에만 남습니다. '
+        + '창에서 이어가려면 아래 「창과 연결하기」를 누르세요.';
     warn.classList.remove('hidden');
   } else {
     warn.textContent = '이 탭의 입력창에 직접 입력하고 전송합니다. 탭을 닫거나 이동시키지 마세요.';
