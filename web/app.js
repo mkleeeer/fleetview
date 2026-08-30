@@ -27,6 +27,7 @@ const ago = (ts) => {
 const PROVIDER_LABEL = { claude: '클로드', gemini: '제미나이', chatgpt: '지피티' };
 const STATUS_LABEL = {
   working: '작업중', waiting: '내 차례', idle: '대기', stale: '멈춤', active: '활성',
+  open: '사용중',        // 터미널이나 앱에서 지금 열려 있는 세션
   pending: '대기', running: '실행중', done: '완료', error: '오류', 'awaiting-human': '사람 차례',
 };
 
@@ -85,7 +86,9 @@ function sessionCard(s) {
   top.appendChild(el('span', 'st ' + s.status, STATUS_LABEL[s.status] || s.status));
   top.appendChild(el('span', 'card-title', s.title));
   const go = el('button', 'go', '→');
-  go.title = '이 화면으로 이동';
+  go.title = s.kind === 'claude-code'
+    ? (s.detail.live ? '이 세션이 열려 있는 창을 앞으로' : '이 세션을 터미널에서 이어서 열기')
+    : '이 화면으로 이동';
   go.onclick = (e) => { e.stopPropagation(); jumpTo(s); };
   top.appendChild(go);
   card.appendChild(top);
@@ -402,9 +405,16 @@ function showOutput(st) {
 // ---------------------------------------------------------------- 이동 / 드로어
 async function jumpTo(s) {
   try {
-    if (s.kind === 'tab') await api('/api/tab/focus', { tabId: s.ref });
-    else if (s.kind === 'app') await api('/api/app/focus', { app: s.ref });
-    else await api('/api/claude/open-terminal', { sessionId: s.ref });
+    if (s.kind === 'tab') return void await api('/api/tab/focus', { tabId: s.ref });
+    if (s.kind === 'app') return void await api('/api/app/focus', { app: s.ref });
+
+    // Claude Code 세션: 살아 있으면 그 창을 띄우고, 꺼져 있으면 이어서 연다.
+    const r = await api('/api/session/focus', { sessionId: s.ref });
+    if (!r.live) {
+      await api('/api/claude/open-terminal', { sessionId: s.ref });
+      return;
+    }
+    if (r.note) alert(r.note);
   } catch (e) { alertErr(e); }
 }
 

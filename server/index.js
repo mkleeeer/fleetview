@@ -13,6 +13,7 @@ const appBridge = require('./appBridge');
 const adapters = require('./adapters');
 const channelHub = require('./channelHub');
 const launcher = require('./sessionLauncher');
+const windowFocus = require('./windowFocus');
 
 const PORT = Number(process.env.FLEET_PORT || 7777);
 const WEB = path.join(__dirname, '..', 'web');
@@ -70,6 +71,22 @@ function refreshClaude() {
   const next = claudeSessions.scan();
   // 채널이 붙은 세션은 대시보드가 곁가지 없는 경로로 보낼 수 있다
   for (const s of next) s.channel = channelHub.isConnected(s.id);
+
+  // 방금 띄운 세션은 아직 대화가 없어 기록 파일이 비어 있고, 그래서 스캔에 안 걸린다.
+  // 채널은 붙었는데 화면에 카드가 없으면 쓸 수가 없으므로 여기서 채워 넣는다.
+  const known = new Set(next.map((s) => s.id));
+  for (const c of channelHub.live()) {
+    if (known.has(c.sessionId)) continue;
+    next.unshift({
+      kind: 'claude-code', provider: 'claude',
+      id: c.sessionId, key: 'cc:' + c.sessionId,
+      title: '(새 세션 — 아직 대화 없음)',
+      project: c.cwd, projectName: (c.cwd || '').split(/[\/]/).filter(Boolean).pop() || '?',
+      status: 'open', channel: true, live: true,
+      lastTool: null, lastUser: '', lastAssistant: '',
+      updatedAt: Date.now(), file: null,
+    });
+  }
   const sig = (list) => JSON.stringify(list.map((s) => [s.id, s.status, s.updatedAt, s.channel]));
   const changed = sig(next) !== sig(store.state.claude);
   store.state.claude = next;
@@ -189,6 +206,24 @@ const server = http.createServer(async (req, res) => {
       const inner = 'cd /d "' + cwd + '" && claude --resume ' + sessionId;
       execFile('cmd', ['/c', 'start', '"Claude"', 'cmd', '/k', inner], { windowsHide: false }, () => {});
       return ok(res);
+    }
+
+    // --- 세션 바로가기 (그 창을 앞으로) ---
+    if (p === '/api/session/focus' && req.method === 'POST') {
+      const { sessionId } = await readBody(req);
+      const live = claudeSessions.liveSessions().get(sessionId);
+      if (!live) {
+        // 꺼져 있는 세션은 창이 없다. 이어서 열어 주는 게 맞다.
+        return ok(res, { focused: false, live: false });
+      }
+      const r = await windowFocus.focusSessionWindow(live.pid, 'FleetView - ' + sessionId.slice(0, 8));
+      return ok(res, {
+        ...r, live: true, entrypoint: live.entrypoint,
+        // 앱은 창이 하나라 세션별 탭까지는 못 고른다
+        note: r.focused && live.entrypoint === 'claude-desktop'
+          ? 'Claude 앱 창을 띄웠습니다. 앱 안에서 해당 세션 탭은 직접 골라 주세요.'
+          : (!r.focused ? '창을 찾지 못했습니다. 그 세션이 열려 있는 터미널로 직접 전환해 주세요.' : ''),
+      });
     }
 
     // --- 세션 시작 (채널을 붙여서 띄운다) ---

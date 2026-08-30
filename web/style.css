@@ -146,6 +146,7 @@ main { padding: 20px; display: flex; flex-direction: column; gap: 26px; max-widt
 .st.idle { color: var(--muted); }
 .st.stale { color: #5a616b; }
 .st.active { color: var(--ok); border-color: #1f4a2c; }
+.st.open { color: #c297ff; border-color: #3b2a52; }
 
 /* ---- 크롬 창 ---- */
 .windows { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
