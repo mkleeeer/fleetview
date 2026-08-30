@@ -58,11 +58,27 @@ function serveStatic(res, urlPath) {
   if (!file.startsWith(WEB)) return fail(res, new Error('경로 오류'), 403);
   fs.readFile(file, (err, buf) => {
     if (err) { res.writeHead(404); return res.end('not found'); }
+
+    let body = buf;
+    // index.html 을 줄 때 js/css 주소에 수정 시각을 붙인다.
+    // 그래야 파일이 바뀌었을 때 브라우저가 옛 파일을 계속 쓰지 않는다.
+    if (rel === 'index.html') {
+      const stamp = (name) => {
+        try { return String(Math.floor(fs.statSync(path.join(WEB, name)).mtimeMs)); }
+        catch { return String(Date.now()); }
+      };
+      body = Buffer.from(buf.toString('utf8')
+        .replace('/app.js', '/app.js?v=' + stamp('app.js'))
+        .replace('/style.css', '/style.css?v=' + stamp('style.css')), 'utf8');
+    }
+
     res.writeHead(200, {
       'content-type': MIME[path.extname(file)] || 'application/octet-stream',
-      'cache-control': 'no-store',
+      'cache-control': 'no-store, must-revalidate',
+      pragma: 'no-cache',
+      expires: '0',
     });
-    res.end(buf);
+    res.end(body);
   });
 }
 

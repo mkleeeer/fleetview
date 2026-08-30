@@ -29,11 +29,15 @@ const PROVIDER_LABEL = { claude: '클로드', gemini: '제미나이', chatgpt: '
 /** claude-opus-5 -> Opus 5, gpt-5.6-sol -> GPT 5.6 처럼 짧게 */
 function shortModel(m) {
   if (!m) return '';
-  const s2 = String(m);
-  let x = s2.replace(/^claude-/, '').replace(/^gpt-/i, 'GPT ');
-  x = x.replace(/-(\d+)-(\d+)$/, ' $1.$2').replace(/-(\d+)$/, ' $1');
-  x = x.replace(/-\d{8}$/, '').replace(/-(sol|latest|preview)$/i, '');
-  return x.replace(/\w/g, (c) => c.toUpperCase()).replace(/Gpt/, 'GPT').trim();
+  const MAP = { opus: 'Opus', sonnet: 'Sonnet', haiku: 'Haiku', fable: 'Fable', gpt: 'GPT', o: 'o' };
+  const parts = String(m)
+    .replace(/^claude-/, '')
+    .replace(/-(sol|latest|preview)$/i, '')
+    .replace(/-\d{8}$/, '')
+    .split('-');
+  const name = MAP[parts[0].toLowerCase()] || (parts[0][0].toUpperCase() + parts[0].slice(1));
+  const ver = parts.slice(1).join('.');
+  return ver ? name + ' ' + ver : name;
 }
 const STATUS_LABEL = {
   working: '작업중', waiting: '내 차례', idle: '대기', stale: '멈춤', active: '활성',
