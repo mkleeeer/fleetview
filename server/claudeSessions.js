@@ -86,6 +86,10 @@ function isRealUserText(t) {
   if (t.startsWith('Caveat:')) return false;
   if (t.startsWith('<system-reminder>')) return false;
   if (t.startsWith('<channel')) return false;   // 채널로 주입된 메시지는 제목감이 아니다
+  // 시스템이 자동으로 끼워 넣는 문구들. 제목이나 마지막 발화로 쓰면 안 된다.
+  if (t.startsWith('[Your previous response')) return false;
+  if (t.startsWith('[Request interrupted')) return false;
+  if (t.startsWith('Please continue')) return false;
   return true;
 }
 
