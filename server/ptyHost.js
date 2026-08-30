@@ -59,11 +59,14 @@ function autoAnswer(s) {
   let tries = 0;
 
   s.autoTimer = setInterval(() => {
-    if (/Claude Code v/.test(s.buf)) return stop();
-    if (Date.now() - s.startedAt > 90000 || tries > 8) return stop();
+    // 판정도 공백을 지운 화면으로 해야 한다. 원본 버퍼에는 단어 사이에 화면 제어
+    // 문자가 껴 있어 'Claude Code v' 가 그대로 나오지 않는다. 이걸 놓치면 클로드가
+    // 이미 떴는데도 계속 키를 쏴서 세션이 죽는다.
+    const flat = s.buf.replace(ANSI, '').replace(/\s+/g, '');
+    if (/ClaudeCodev/.test(flat)) return stop();
+    if (Date.now() - s.startedAt > 60000 || tries > 6) return stop();
     if (Date.now() < quietUntil) return;
 
-    const flat = s.buf.replace(ANSI, '').replace(/\s+/g, '');
     const trust = flat.lastIndexOf('Yes,Itrustthisfolder');
     const dev = flat.lastIndexOf('Iamusingthisforlocaldevelopment');
     if (trust < 0 && dev < 0) return;
