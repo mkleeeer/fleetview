@@ -66,6 +66,13 @@ function serveStatic(res, urlPath) {
   });
 }
 
+/** 경로에서 마지막 폴더 이름만 뽑는다. 구분자는 path 모듈로 처리한다. */
+const baseName = (p2) => {
+  if (!p2) return '?';
+  const parts = p2.split(path.sep).join('/').split('/').filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : '?';
+};
+
 // ---- Claude Code 세션 폴링 ------------------------------------------------
 function refreshClaude() {
   const next = claudeSessions.scan();
@@ -81,7 +88,7 @@ function refreshClaude() {
       kind: 'claude-code', provider: 'claude',
       id: c.sessionId, key: 'cc:' + c.sessionId,
       title: '(새 세션 — 아직 대화 없음)',
-      project: c.cwd, projectName: (c.cwd || '').split(/[\/]/).filter(Boolean).pop() || '?',
+      project: c.cwd, projectName: baseName(c.cwd),
       status: 'open', channel: true, live: true,
       lastTool: null, lastUser: '', lastAssistant: '',
       updatedAt: Date.now(), file: null,
@@ -412,6 +419,16 @@ async function refreshApps() {
   } catch { /* 앱이 없거나 응답 없음 */ }
 }
 
+// 예기치 못한 오류로 서버가 조용히 죽지 않게 한다.
+// 어댑터들이 외부 프로세스와 네트워크를 다루므로 어딘가에서 거부된 프로미스가
+// 새어 나올 수 있는데, Node 는 그걸 기본적으로 치명적 오류로 취급한다.
+process.on('unhandledRejection', (e) => {
+  console.error('[처리되지 않은 거부]', (e && e.stack) || e);
+});
+process.on('uncaughtException', (e) => {
+  console.error('[처리되지 않은 예외]', (e && e.stack) || e);
+});
+
 store.load();
 refreshClaude();
 refreshApps();
@@ -421,6 +438,14 @@ setInterval(refreshAdapters, 6000);
 setInterval(refreshClaude, 3000);
 // 확장 온/오프라인 표시가 늦지 않도록 주기적으로 상태를 밀어준다
 setInterval(() => store.pushState(), 5000);
+
+server.on('error', (e) => {
+  if (e.code === 'EADDRINUSE') {
+    console.error(`포트 ${PORT} 를 이미 쓰고 있습니다. 기존 FleetView 가 떠 있는지 확인하세요.`);
+    process.exit(1);
+  }
+  console.error('[서버 오류]', e.message);
+});
 
 server.listen(PORT, '127.0.0.1', () => {
   console.log('FleetView  ->  http://localhost:' + PORT);
