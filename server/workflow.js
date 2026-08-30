@@ -98,7 +98,7 @@ async function dispatch(stage, prompt) {
   if (t.type === 'manual') throw new Error('__MANUAL__');
 
   // 나머지는 전부 어댑터 한 규격으로 간다. 사업자별 차이는 어댑터가 흡수한다.
-  let adapterId = t.adapterId || LEGACY_TARGET[t.type];
+  let adapterId = t.adapterId || (t.type === 'adapter' ? t.ref : LEGACY_TARGET[t.type]);
   if (!adapterId && t.type === 'tab') {
     adapterId = { claude: 'claude-tab', gemini: 'gemini-tab', chatgpt: 'chatgpt-tab' }[t.provider];
   }

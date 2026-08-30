@@ -53,6 +53,7 @@ async send({ threadId, text, cwd, onDelta }) -> { text, threadId, usage, toolCal
 | `gemini-tab` | ui | 브라우저 | 읽기 확인, 전송 1회 성공 후 회귀 |
 | `chatgpt-tab` | ui | 브라우저 | 읽기 확인 |
 | `chatgpt-app` | ui | 앱 | 전송 왕복 확인 (9.8초) |
+| `codex-cli` | cli | ChatGPT 구독 | **기존 세션 이어가기 확인 (7.8초)** |
 
 ---
 
@@ -71,6 +72,7 @@ async send({ threadId, text, cwd, onDelta }) -> { text, threadId, usage, toolCal
 | 제미나이 탭 전송 왕복 | 49.7초 성공 (이후 회귀, 아래 참고) |
 | Claude Code 새 세션 생성 | 16.5초, 세션 14→15, 구독으로 동작 |
 | 유휴 세션 선형 연결 | 트리 분석으로 확인. 곁가지 없음 |
+| Codex CLI 기존 세션 이어가기 | `7` → `10` → `"7,10"`. 문맥 유지 확인. 7.8초 |
 
 ---
 
@@ -221,7 +223,7 @@ extOnline: Date.now() - extLastSeen < 8000   // 8초
 | 항목 | 상태 | 이유 |
 |---|---|---|
 | Claude 데스크톱 앱 연결 | **영구 불가** | 앱이 디버그 스위치를 거부. 우회 안 함 |
-| 실행 중인 세션에 메시지 주입 | 미구현 | 아래 6장 참고 |
+| 실행 중인 Claude 세션에 주입 | 미구현 | 아래 6장 참고. Codex 는 `codex queue` 로 이미 가능 |
 | Anthropic API 어댑터 | 미검증 | API 키 없음. 계정 크레딧 $0 |
 | 웹 탭 전송 (수정 후) | 미검증 | 테스트 실수로 두 번 깨짐 |
 | 워크플로우 담당 드롭다운 | 구식 | 어댑터 기준이 아니라 예전 타깃 기준 |
@@ -233,6 +235,50 @@ extOnline: Date.now() - extLastSeen < 8000   // 8초
 | Electron 데스크톱 앱 | 코드만 | `desktop/main.js` 작성됨, `npm install electron` 미실행 |
 
 ---
+
+### 4.9 지피티도 공식 CLI 를 놔두고 화면을 뒤지고 있었다
+
+"지피티를 앱으로 쓴다" 는 말에 앱 화면 조종(CDP)으로 갔습니다. 그런데
+**Codex CLI 가 이미 설치돼 있었습니다.**
+
+```
+codex --version   → codex-cli 0.150.1
+codex login status → Logged in using ChatGPT   (구독. API 키 불필요)
+```
+
+Claude 앱 때와 **똑같은 실수를 지피티 쪽에서도** 하고 있었던 것입니다.
+정식 통로를 놔두고 화면을 뒤졌습니다.
+
+Codex CLI 가 제공하는 것:
+
+| 명령 | 용도 |
+|---|---|
+| `codex exec` | 새 세션 비대화형 실행 |
+| `codex exec resume <id>` | **기존 세션 이어가기** |
+| `codex queue --thread <id> --message` | 실행 중 세션에 메시지 넣기 |
+| `~/.codex/session_index.jsonl` | 세션 목록 (id / thread_name / updated_at) |
+
+`codex exec resume` 로 기존 세션을 이어가는 것을 확인했습니다.
+`7` 을 답한 세션에 이어서 물으니 `10`, 다시 물으니 `"7,10"` — 문맥이 유지됩니다.
+
+**교훈:** 새 대상을 붙이기 전에 **그 회사가 공식 CLI 를 내놨는지부터 확인한다.**
+두 번 다 그걸 안 하고 화면 조종부터 시작했습니다.
+
+### 4.10 축이 두 개라는 것을 늦게 깨달았다
+
+어댑터에 `kind`(api/cli/ui) 만 있었습니다. 사용자가 지적해서 두 번째 축을 넣었습니다.
+
+```
+kind        = api | cli | ui      ← 어떻게 붙었나 (안정성)
+agentType   = coding | chat       ← 뭘 할 수 있나
+```
+
+둘은 직교합니다. `claude-code` 와 `codex-cli` 는 cli/coding, `gemini-tab` 은 ui/chat 입니다.
+이 라벨이 없어서 워크플로우에서 "파일을 고쳐야 하는 단계" 와 "그냥 물어보는 단계" 를
+구분하지 못하고 있었습니다.
+
+역할(`조사` / `문서` / `검수`)은 agentType 이 아니라 **워크플로우 단계 배정**입니다.
+같은 세션이 작업에 따라 다른 역할을 맡습니다.
 
 ## 6. 다음 단계 — Claude Code Channels
 

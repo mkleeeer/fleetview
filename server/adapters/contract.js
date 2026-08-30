@@ -9,6 +9,8 @@
  *   id            문자열 고유 키
  *   provider      'anthropic' | 'openai' | 'google'
  *   label         사람이 읽는 이름
+ *   agentType     'coding' 파일 수정·명령 실행까지 하는 에이전트
+ *                 'chat'   질문/답변만 주고받는 대화형
  *   kind          'api'  공식 API — 안정적, 키 필요
  *                 'cli'  공식 CLI — 안정적, 구독 사용
  *                 'ui'   웹/앱 UI 자동화 — 구독 사용, DOM 의존이라 깨질 수 있음
@@ -94,6 +96,7 @@ async function describeAll() {
     catch (e) { health = { ok: false, reason: e.message }; }
     return {
       id: a.id, provider: a.provider, label: a.label, kind: a.kind,
+      agentType: a.agentType || 'chat',
       capabilities: a.capabilities || {},
       setupHint: a.setupHint || '',
       health,

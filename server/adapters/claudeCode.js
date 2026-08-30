@@ -26,6 +26,7 @@ const adapter = {
   provider: 'anthropic',
   label: 'Claude Code (CLI)',
   kind: 'cli',
+  agentType: 'coding',
   capabilities: { streaming: true, tools: true, history: true, threads: true, createThread: true },
   setupHint: 'claude CLI 가 PATH 에 있어야 합니다. 이미 설치되어 있으면 따로 할 일이 없습니다.',
 

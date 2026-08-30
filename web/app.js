@@ -143,6 +143,12 @@ function renderAdapters() {
     const kind = el('span', 'kind ' + a.kind, a.kind);
     kind.title = KIND_NOTE[a.kind] || '';
     top.appendChild(kind);
+    const at = el('span', 'atype ' + (a.agentType || 'chat'),
+      a.agentType === 'coding' ? '코딩' : '대화');
+    at.title = a.agentType === 'coding'
+      ? '파일 수정·명령 실행까지 가능'
+      : '질문과 답변만 주고받음';
+    top.appendChild(at);
     box.appendChild(top);
 
     box.appendChild(el('div', 'ad-state ' + (a.health.ok ? 'ok' : 'no'),
@@ -198,9 +204,12 @@ function targetOptions(current) {
   for (const c of S.claude) {
     opts.push({ v: 'claude-code:' + c.id, label: '클로드코드 · ' + c.projectName + ' · ' + c.title.slice(0, 24) });
   }
-  for (const a of S.apps || []) {
-    if (!a.connected) continue;
-    opts.push({ v: 'app:' + a.id, label: a.label + ' · ' + (a.title || '대화창').slice(0, 30) });
+  for (const a of S.adapters || []) {
+    if (!a.health.ok) continue;
+    opts.push({
+      v: 'adapter:' + a.id,
+      label: `${a.label} [${a.agentType === 'coding' ? '코딩' : '대화'}]`,
+    });
   }
   for (const t of S.tabs) {
     if (!t.provider) continue;

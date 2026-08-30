@@ -59,6 +59,7 @@ const adapter = {
   provider: 'anthropic',
   label: 'Claude (API)',
   kind: 'api',
+  agentType: 'chat',
   capabilities: { streaming: true, tools: true, history: true, threads: true },
   setupHint:
     'PowerShell 에서 키를 환경변수로 넣고 FleetView 를 다시 시작하세요:\n' +

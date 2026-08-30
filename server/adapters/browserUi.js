@@ -65,6 +65,7 @@ function tabAdapter({ id, provider, label, hostMatch }) {
   return {
     id, provider, label,
     kind: 'ui',
+    agentType: 'chat',
     capabilities: { streaming: false, tools: false, history: false, threads: true },
     setupHint: `크롬 확장을 설치하고 ${hostMatch} 탭을 열어두세요.`,
 
@@ -117,6 +118,7 @@ const chatgptApp = {
   provider: 'openai',
   label: 'ChatGPT (데스크톱 앱)',
   kind: 'ui',
+  agentType: 'chat',
   capabilities: { streaming: false, tools: false, history: false, threads: false },
   setupHint: 'connect-chatgpt-app.cmd 를 탐색기에서 실행해 앱을 디버그 모드로 띄우세요.',
 
