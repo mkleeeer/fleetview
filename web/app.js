@@ -603,7 +603,6 @@ function renderAll() {
   const pos = act && act.selectionStart;
 
   renderTop();
-  renderWorkflows();
   renderAdapters();
   renderLanes();
   renderWindows();
@@ -618,14 +617,6 @@ function renderAll() {
 }
 
 // ---------------------------------------------------------------- 이벤트 배선
-$('#btnNewTask').onclick = async () => {
-  const name = prompt('작업 이름 (예: 유튜브 영상 만들기)');
-  if (!name) return;
-  const wf = await api('/api/wf/create', { name });
-  await api('/api/wf/stage/add', { wfId: wf.id, name: '수집' });
-  await api('/api/wf/stage/add', { wfId: wf.id, name: '분석', prompt: '아래 수집 결과를 분석해줘.\n\n{{input}}' });
-  await api('/api/wf/stage/add', { wfId: wf.id, name: '정리', prompt: '아래 분석을 바탕으로 최종본을 만들어줘.\n\n{{input}}' });
-};
 const adaptersToggle = document.getElementById('adaptersToggle');
 if (adaptersToggle) adaptersToggle.onclick = () => { adaptersOpen = !adaptersOpen; renderAdapters(); };
 
