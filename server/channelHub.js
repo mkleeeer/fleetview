@@ -82,7 +82,6 @@ function send(sessionId, text) {
     return Promise.reject(e);
   }
 
-  const before = lastAssistantOf(sessionId);
   const id = store.uid('msg');
   queueOf(sessionId).push({ id, text });
   flush(sessionId);
@@ -106,16 +105,25 @@ function send(sessionId, text) {
     });
 
     // 2) 기록 파일도 함께 살핀다. 도구를 안 불러도 답을 건진다.
+    //
+    // "마지막 어시스턴트 발화" 를 줍지 않는다. 그러면 사용자가 그 창에서 동시에
+    // 다른 걸 물어봤을 때 그 답을 가로챈다. 대신 우리가 넣은 메시지의 msg_id 를
+    // 기록에서 찾아, 그 뒤부터 다음 사용자 발화 전까지만 모은다.
     let stable = 0;
     let seen = '';
     const watch = setInterval(() => {
-      const cur = lastAssistantOf(sessionId);
-      if (!cur || cur === before) return;
-      if (cur === seen) {
+      const r = sessions.replyTo(sessionId, id);
+      if (!r.found || !r.text) return;
+
+      // 다음 사용자 발화가 나타났으면 턴이 확실히 끝난 것이다. 바로 확정한다.
+      if (r.closed) return finish(resolve, { text: r.text, sessionId, via: 'transcript' });
+
+      // 아직 진행 중일 수 있으니 잠시 변화가 없을 때까지 기다린다.
+      if (r.text === seen) {
         stable++;
-        if (stable >= 2) finish(resolve, { text: cur, sessionId, via: 'transcript' });
+        if (stable >= 3) finish(resolve, { text: r.text, sessionId, via: 'transcript' });
       } else {
-        seen = cur;
+        seen = r.text;
         stable = 0;
       }
     }, 1500);
@@ -126,12 +134,6 @@ function send(sessionId, text) {
       finish(reject, e);
     }, REPLY_TIMEOUT);
   });
-}
-
-/** 세션 기록에서 마지막 어시스턴트 발화를 읽는다 */
-function lastAssistantOf(sessionId) {
-  const s = sessions.scan().find((x) => x.id === sessionId);
-  return (s && (s.lastAssistantFull || s.lastAssistant)) || '';
 }
 
 /** 세션 → 대시보드 */

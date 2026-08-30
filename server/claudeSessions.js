@@ -199,6 +199,63 @@ function liveSessions() {
   return out;
 }
 
+
+/**
+ * 채널로 넣은 메시지에 대한 답만 정확히 뽑는다.
+ *
+ * "마지막 어시스턴트 발화" 를 줍는 방식은 위험하다. 사용자가 그 창에서 동시에
+ * 다른 걸 물어보면 그 답을 가로채고, 도구를 여러 번 쓰는 도중의 중간 말을
+ * 최종 답으로 착각한다.
+ *
+ * 채널 메시지는 기록에 <channel ... msg_id="..."> 로 남으므로, 그 항목을 찾아
+ * 그 뒤부터 다음 사용자 발화 전까지의 어시스턴트 발화만 모은다.
+ *
+ * @returns {{found:boolean, text:string, closed:boolean}}
+ *   found  그 메시지를 기록에서 찾았는가
+ *   text   지금까지 모인 답
+ *   closed 다음 사용자 발화가 나타나 턴이 확실히 끝났는가
+ */
+function replyTo(sessionId, msgId) {
+  const file = findFile(sessionId);
+  if (!file) return { found: false, text: '', closed: false };
+
+  const tail = readTail(file, TAIL_BYTES);
+  if (!tail) return { found: false, text: '', closed: false };
+  const entries = parseLines(tail.text, { dropFirst: tail.truncated });
+
+  let i = entries.findIndex((e) => e.type === 'user' && textOf(e).includes(msgId));
+  if (i < 0) return { found: false, text: '', closed: false };
+
+  const parts = [];
+  let closed = false;
+  for (let j = i + 1; j < entries.length; j++) {
+    const e = entries[j];
+    if (e.type === 'user') {
+      // 다음 사용자 발화를 만나면 이 턴은 끝난 것이다.
+      // 단 도구 결과는 user 타입으로 기록되므로 실제 발화만 경계로 본다.
+      if (isRealUserText(textOf(e))) { closed = true; break; }
+      continue;
+    }
+    if (e.type !== 'assistant') continue;
+    const t = textOf(e);
+    if (t) parts.push(t);
+  }
+  const SEP = String.fromCharCode(10, 10);   // 소스에 이스케이프를 쓰지 않는다
+  return { found: true, text: parts.join(SEP).trim(), closed };
+}
+
+/** 세션 id 로 기록 파일 경로를 찾는다 */
+function findFile(sessionId) {
+  let projects;
+  try { projects = fs.readdirSync(ROOT, { withFileTypes: true }); } catch { return null; }
+  for (const p of projects) {
+    if (!p.isDirectory()) continue;
+    const f = path.join(ROOT, p.name, sessionId + '.jsonl');
+    if (fs.existsSync(f)) return f;
+  }
+  return null;
+}
+
 function scan() {
   const live = liveSessions();
   let projects;
@@ -225,4 +282,4 @@ function scan() {
   return out;
 }
 
-module.exports = { scan, liveSessions, ROOT };
+module.exports = { scan, liveSessions, replyTo, ROOT };
