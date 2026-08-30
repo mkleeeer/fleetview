@@ -123,12 +123,14 @@ function analyze(file, projectDirName) {
   let lastAssistantText = '';
   let lastTool = null;
   let lastRole = null;
+  let model = '';
   for (const e of entries) {
     if (e.cwd) cwd = e.cwd;
     if (e.type === 'user') {
       const t = textOf(e);
       if (isRealUserText(t)) { lastUserText = t; lastRole = 'user'; }
     } else if (e.type === 'assistant') {
+      if (e.message && e.message.model) model = e.message.model;
       const t = textOf(e);
       if (t) lastAssistantText = t;
       const tool = toolNameOf(e);
@@ -154,6 +156,7 @@ function analyze(file, projectDirName) {
     project: cwd || decodeProjectDir(projectDirName),
     projectName: path.basename(cwd || decodeProjectDir(projectDirName)) || '?',
     status,
+    model,
     lastTool,
     lastUser: clip(lastUserText, 160),
     lastAssistant: clip(lastAssistantText, 200),

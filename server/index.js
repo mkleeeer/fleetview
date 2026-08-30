@@ -272,9 +272,11 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (p === '/api/adapters/send' && req.method === 'POST') {
-      const { id, threadId, text, stream, cwd } = await readBody(req);
+      const { id, threadId, text, stream, cwd, logKey } = await readBody(req);
       const a = adapters.must(id);
-      const key = 'ad:' + id + ':' + (threadId || 'new');
+      // 대시보드 카드가 자기 이름을 넘겨주면 그 이름으로 기록한다.
+      // 안 그러면 카드가 읽는 이름과 저장되는 이름이 어긋나 대화가 사라진 것처럼 보인다.
+      const key = logKey || ('ad:' + id + ':' + (threadId || 'new'));
       store.log(key, { role: 'user', text });
       store.broadcast('busy', { key, busy: true });
       try {

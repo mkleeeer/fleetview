@@ -25,6 +25,16 @@ const ago = (ts) => {
   return Math.floor(s / 86400) + '일 전';
 };
 const PROVIDER_LABEL = { claude: '클로드', gemini: '제미나이', chatgpt: '지피티' };
+
+/** claude-opus-5 -> Opus 5, gpt-5.6-sol -> GPT 5.6 처럼 짧게 */
+function shortModel(m) {
+  if (!m) return '';
+  const s2 = String(m);
+  let x = s2.replace(/^claude-/, '').replace(/^gpt-/i, 'GPT ');
+  x = x.replace(/-(\d+)-(\d+)$/, ' $1.$2').replace(/-(\d+)$/, ' $1');
+  x = x.replace(/-\d{8}$/, '').replace(/-(sol|latest|preview)$/i, '');
+  return x.replace(/\w/g, (c) => c.toUpperCase()).replace(/Gpt/, 'GPT').trim();
+}
 const STATUS_LABEL = {
   working: '작업중', waiting: '내 차례', idle: '대기', stale: '멈춤', active: '활성',
   open: '사용중',        // 터미널이나 앱에서 지금 열려 있는 세션
@@ -46,8 +56,14 @@ function sessions() {
       key: 'cc:' + c.id, kind: 'claude-code', ref: c.id, provider: 'claude',
       surface: 'app',
       title: c.title,
-      sub: (c.channel ? '● 연결됨 · ' : '') + c.projectName + ' · ' + ago(c.updatedAt)
-        + (c.lastTool ? ' · ' + c.lastTool : ''),
+      model: c.model,
+      sub: [
+        c.channel ? '● 연결됨' : null,
+        '코드',                                   // Claude Code 세션임을 밝힌다
+        shortModel(c.model) || null,
+        c.projectName,
+        ago(c.updatedAt),
+      ].filter(Boolean).join(' · '),
       status: c.status, updatedAt: c.updatedAt, detail: c,
     });
   }
@@ -70,7 +86,9 @@ function sessions() {
       key: 'codex:' + c.id, kind: 'codex', ref: c.id, provider: 'chatgpt',
       surface: 'app',
       title: c.title,
-      sub: 'Codex · ' + (c.updatedAt ? ago(c.updatedAt) : '시각 모름'),
+      model: (c.meta && c.meta.model) || '',
+      sub: ['코드', 'Codex', shortModel(c.meta && c.meta.model) || null,
+        c.updatedAt ? ago(c.updatedAt) : '시각 모름'].filter(Boolean).join(' · '),
       // Codex 는 실행 중인지 알 방법이 없어 최근 활동으로만 가른다
       status: age < 30 * 60 * 1000 ? 'idle' : 'stale',
       updatedAt: c.updatedAt || 0, detail: c,
@@ -81,7 +99,8 @@ function sessions() {
     out.push({
       key: 'tab:' + t.id, kind: 'tab', ref: t.id, provider: t.provider,
       surface: 'tab',
-      title: t.title || '(제목 없음)', sub: '크롬 탭' + (t.active ? ' · 활성' : ''),
+      title: t.title || '(제목 없음)',
+      sub: '대화 · 크롬 탭' + (t.active ? ' · 보고 있음' : ''),
       status: t.active ? 'active' : 'idle', updatedAt: 0, detail: t,
     });
   }
@@ -497,6 +516,7 @@ async function openDrawer(s) {
   drawer = s;
   $('#drawerTitle').textContent = s.title;
   $('#drawerSub').textContent = (PROVIDER_LABEL[s.provider] || '') + ' · ' + s.sub;
+  $('#drawerSub').title = s.model ? ('모델: ' + s.model) : '';
   $('#drawer').classList.add('open');
   $('#scrim').classList.add('open');
   const goBtn = $('#drawerGo');
@@ -539,13 +559,19 @@ async function loadTranscript(key) {
   chat.textContent = '';
   try {
     const j = await api('/api/transcript?key=' + encodeURIComponent(key));
-    if (!j.entries.length) chat.appendChild(el('div', 'msg sys', '아직 이 대시보드에서 주고받은 내용이 없습니다.'));
+    if (!j.entries.length) {
+      const empty = el('div', 'msg sys', '아직 이 대시보드에서 주고받은 내용이 없습니다.');
+      empty.id = 'chatEmpty';
+      chat.appendChild(empty);
+    }
     for (const e of j.entries) appendMsg(e);
   } catch (e) { alertErr(e); }
 }
 
 function appendMsg(e) {
   const chat = $('#chat');
+  const empty = document.getElementById('chatEmpty');
+  if (empty) empty.remove();   // 대화가 생기면 안내문은 치운다
   const m = el('div', 'msg ' + e.role, e.text);
   chat.appendChild(m);
   chat.scrollTop = chat.scrollHeight;
@@ -566,13 +592,13 @@ async function sendChat() {
   busyKeys.add(drawer.key);
   renderLanes();
   try {
+    const logKey = drawer.key;   // 저장과 조회를 같은 이름으로 맞춘다
     const r = drawer.kind === 'codex'
-      ? await api('/api/adapters/send', { id: 'codex-cli', threadId: drawer.ref, text })
+      ? await api('/api/adapters/send', { id: 'codex-cli', threadId: drawer.ref, text, logKey })
       : drawer.kind === 'claude-code'
-      // 채널이 붙어 있으면 실행 중인 그 세션으로 직접 넣는다(곁가지 없음).
-      // 없으면 예전 방식으로 새 프로세스를 띄운다.
+      // 창과 연결돼 있으면 그 창으로 직접 넣고, 아니면 따로 하나 실행한다.
       ? drawer.detail.channel
-        ? await api('/api/adapters/send', { id: 'claude-channel', threadId: drawer.ref, text })
+        ? await api('/api/adapters/send', { id: 'claude-channel', threadId: drawer.ref, text, logKey })
         : await api('/api/claude/send', { sessionId: drawer.ref, text })
       : drawer.kind === 'app'
       ? await api('/api/app/send', { app: drawer.ref, text })

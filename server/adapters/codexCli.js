@@ -84,6 +84,15 @@ function run(args, { cwd, text, onChunk } = {}) {
   });
 }
 
+/** ~/.codex/config.toml 에 지정된 모델을 읽는다. 없으면 codex 기본값을 쓴다. */
+function configuredModel() {
+  try {
+    const toml = fs.readFileSync(path.join(CODEX_HOME, 'config.toml'), 'utf8');
+    const m = toml.match(/^\s*model\s*=\s*["']([^"']+)["']/m);
+    return m ? m[1] : '';
+  } catch { return ''; }
+}
+
 function readIndex() {
   let raw;
   try { raw = fs.readFileSync(INDEX, 'utf8'); } catch { return []; }
@@ -134,7 +143,7 @@ const adapter = {
         id: j.id,
         title: j.thread_name || '(제목 없음)',
         updatedAt: Date.parse(j.updated_at || '') || 0,
-        meta: {},
+        meta: { model: configuredModel() },
       }));
   },
 
