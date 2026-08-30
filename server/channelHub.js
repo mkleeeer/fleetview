@@ -147,11 +147,23 @@ function send(sessionId, text, onProgress) {
   });
 }
 
-/** 세션 → 대시보드 */
+/**
+ * 세션 → 대시보드
+ *
+ * 도구에 담겨 온 글은 쓰지 않는다. 클로드가 창에 쓴 답과 도구에 넣는 글을
+ * 따로 작성하는 바람에, 같은 대화가 창과 대시보드에서 다르게 보였다.
+ * 도구 호출은 "턴이 끝났다" 는 신호로만 쓰고, 보여줄 글은 창에 실제로 쓰인 것을
+ * 기록에서 읽어 온다. 그래야 양쪽이 같을 수밖에 없다.
+ */
 function reply({ sessionId, msgId, text }) {
   const p = pending.get(msgId);
   if (!p) return false;
-  p.resolve({ text: text || '', sessionId, via: 'tool' });
+  const r = sessions.replyTo(sessionId, msgId);
+  p.resolve({
+    text: (r.found && r.text) ? r.text : (text || ''),
+    sessionId,
+    via: (r.found && r.text) ? 'transcript' : 'tool',
+  });
   return true;
 }
 
