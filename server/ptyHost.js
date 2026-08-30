@@ -61,10 +61,21 @@ function create({ cwd, resumeId, channel = true, cols = 120, rows = 32 } = {}) {
   proc.onData((data) => {
     append(s, data);
 
-    // 개발 채널 경고는 매번 사람이 눌러야 넘어간다. 우리가 붙인 채널이니 한 번만 자동으로 넘긴다.
+    // 개발 채널 경고를 자동으로 넘긴다.
+    //
+    // 판단 기준을 "경고가 보이면 누른다" 로 잡으면 안 된다. TUI 가 화면을 계속 다시
+    // 그려서 그 문구가 최근 버퍼에서 밀려나면 재시도를 영영 멈춘다.
+    // 대신 "클로드 배너가 뜰 때까지 누른다" 로 잡는다.
     if (!s.autoAnswered && /I am using this for local development/.test(s.buf)) {
       s.autoAnswered = true;
-      setTimeout(() => { try { proc.write('\r'); } catch {} }, 300);
+      let tries = 0;
+      const press = () => {
+        if (tries++ > 8) return;
+        if (/Claude Code v/.test(s.buf)) return;   // 넘어갔다
+        try { proc.write(String.fromCharCode(13)); } catch {}
+        setTimeout(press, 1500);
+      };
+      setTimeout(press, 1500);
     }
 
     store.broadcast('pty', { id, data });
