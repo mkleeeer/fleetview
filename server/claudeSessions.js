@@ -209,6 +209,7 @@ function scan() {
       if (!s) continue;
       const l = live.get(s.id);
       s.live = !!l;                       // 지금 열려 있는가
+      s.channel = false;                  // 채널 연결 여부는 index.js 에서 채운다
       s.liveInfo = l || null;             // pid / 표시 이름 / 실행 형태
       if (l) s.status = 'open';           // 다른 상태보다 이게 우선이다
       out.push(s);

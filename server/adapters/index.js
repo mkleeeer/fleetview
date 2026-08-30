@@ -3,5 +3,6 @@
 require('./anthropic');
 require('./claudeCode');
 require('./codexCli');
+require('./claudeChannel');
 require('./browserUi');
 module.exports = require('./contract');

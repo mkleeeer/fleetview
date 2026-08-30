@@ -11,6 +11,7 @@ const wf = require('./workflow');
 const claudeSessions = require('./claudeSessions');
 const appBridge = require('./appBridge');
 const adapters = require('./adapters');
+const channelHub = require('./channelHub');
 
 const PORT = Number(process.env.FLEET_PORT || 7777);
 const WEB = path.join(__dirname, '..', 'web');
@@ -186,6 +187,21 @@ const server = http.createServer(async (req, res) => {
       execFile('cmd', ['/c', 'start', '"Claude"', 'cmd', '/k', inner], { windowsHide: false }, () => {});
       return ok(res);
     }
+
+    // --- Claude Code 채널 (실행 중 세션에 직접 주입) ---
+    if (p === '/api/channel/register' && req.method === 'POST') {
+      const body = await readBody(req);
+      return ok(res, channelHub.register(body) || {});
+    }
+    if (p === '/api/channel/poll') {
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
+      return channelHub.hold(u.searchParams.get('sessionId'), res);
+    }
+    if (p === '/api/channel/reply' && req.method === 'POST') {
+      const body = await readBody(req);
+      return ok(res, { delivered: channelHub.reply(body) });
+    }
+    if (p === '/api/channel/list') return ok(res, { channels: channelHub.live() });
 
     // --- 어댑터 계층 ---
     // 어떤 사업자든 같은 규격으로 부른다. 인증·이력·스트리밍·도구·오류가 통일돼 있다.

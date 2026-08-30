@@ -51,6 +51,7 @@ async send({ threadId, text, cwd, onDelta }) -> { text, threadId, usage, toolCal
 |---|---|---|---|---|
 | `claude-code` | cli | coding | 구독 | 동작 확인 |
 | `codex-cli` | cli | coding | ChatGPT 구독 | **기존 세션 이어가기 확인 (7.8초)** |
+| `claude-channel` | cli | coding | 구독 | **실행 중 세션 직접 주입 확인 (12.3초)** |
 | `anthropic-api` | api | chat | API 키 | **미검증** (키 없음) |
 | `claude-tab` | ui | chat | 브라우저 | 미검증 |
 | `gemini-tab` | ui | chat | 브라우저 | 읽기 확인, 전송 1회 성공 후 회귀 |
@@ -75,6 +76,7 @@ async send({ threadId, text, cwd, onDelta }) -> { text, threadId, usage, toolCal
 | Claude Code 새 세션 생성 | 16.5초, 세션 14→15, 구독으로 동작 |
 | 유휴 세션 선형 연결 | 트리 분석으로 확인. 곁가지 없음 |
 | Codex CLI 기존 세션 이어가기 | `7` → `10` → `"7,10"`. 문맥 유지 확인. 7.8초 |
+| **Claude 채널 주입** | 터미널에 살아있는 세션에 대시보드에서 전송 → `"채널 확인됨"` 회수. 12.3초. 새 프로세스 없음 |
 
 ---
 
@@ -269,7 +271,6 @@ agentType   = coding | chat       ← 뭘 할 수 있나
 | 항목 | 상태 | 이유 |
 |---|---|---|
 | Claude 데스크톱 앱 연결 | **영구 불가** | 앱이 디버그 스위치를 거부. 우회 안 함 |
-| 실행 중인 Claude 세션에 주입 | 미구현 | 아래 6장 참고. Codex 는 `codex queue` 로 이미 가능 |
 | Anthropic API 어댑터 | 미검증 | API 키 없음. 계정 크레딧 $0 |
 | 웹 탭 전송 (수정 후) | 미검증 | 테스트 실수로 두 번 깨짐 |
 | 워크플로우 담당 드롭다운 | 구식 | 어댑터 기준이 아니라 예전 타깃 기준 |
@@ -282,63 +283,64 @@ agentType   = coding | chat       ← 뭘 할 수 있나
 
 ---
 
-## 6. 다음 단계 — Claude Code Channels
+## 6. Claude Code Channels — 구현 완료
 
-**현재 방식의 한계:** `claude -p --resume <id>` 는 **새 프로세스**를 띄웁니다.
-그 세션이 지금 터미널에 열려 있으면 두 프로세스가 각자 대화를 소유하게 되고 갈라집니다.
-사용자가 원한 것은 "기존 세션을 그대로 이어 쓰는 것" 인데, 이 방식으로는 안 됩니다.
-
-**공식 해법이 있습니다.** Claude Code 의 [Channels](https://code.claude.com/docs/en/channels)
-(리서치 프리뷰) 는 외부 프로그램이 **실행 중인 세션에 직접 메시지를 밀어넣는** 구조입니다.
-
-확인한 규격 ([channels-reference](https://code.claude.com/docs/en/channels-reference)):
-
-- 채널은 **stdio MCP 서버**다. Bun 아니어도 되고 Node 로 충분하다.
-  필요한 건 `@modelcontextprotocol/sdk` 하나.
-- 능력 선언:
-  ```js
-  capabilities: {
-    experimental: { 'claude/channel': {} },   // 필수. 알림 리스너 등록
-    tools: {},                                // 양방향이면 필요
-  }
-  ```
-- 밀어넣기: `notifications/claude/channel` 알림을 보낸다
-  ```js
-  await mcp.notification({
-    method: 'notifications/claude/channel',
-    params: { content: '메시지 본문', meta: { chat_id: '...' } },
-  })
-  ```
-  세션에는 `<channel source="..." chat_id="...">본문</channel>` 로 도착한다.
-- 되받기: 표준 MCP 도구(`reply`)를 노출하면 Claude 가 그걸 호출해 답을 보낸다.
-- 실행: **세션을 시작할 때 플래그가 필요하다.**
-  ```
-  claude --dangerously-load-development-channels server:fleetview
-  ```
-  프리뷰 동안 커스텀 채널은 허용 목록에 없으므로 개발 플래그를 써야 한다.
-
-**중요한 제약:** 이미 떠 있는 세션에는 나중에 붙일 수 없습니다.
-그 세션을 한 번 종료하고 **같은 세션 ID 로 채널을 붙여 재개**해야 합니다.
-
-```
-claude --resume <세션id> --dangerously-load-development-channels server:fleetview
-```
-
-**설계 방향:**
+**해결한 문제:** `claude -p --resume <id>` 는 새 프로세스를 띄운다. 대상 세션이 지금
+터미널에 열려 있으면 두 프로세스가 각자 대화를 소유해 기록이 갈라진다.
+채널은 이미 돌고 있는 세션에 직접 이벤트를 넣으므로 주인이 하나다.
 
 ```
 대시보드 → POST /api/adapters/send (claude-channel, threadId=<세션id>)
-   서버가 큐에 적재
-채널(MCP 서버)이 폴링으로 가져감 → mcp.notification() → 실행 중 세션에 주입
-Claude 가 reply 도구 호출 → POST /api/channel/reply → 대시보드에 응답 표시
+   서버가 세션별 큐에 적재
+채널(MCP 서버)이 롱폴링으로 가져감
+   → notifications/claude/channel → 실행 중 세션에 <channel> 태그로 도착
+Claude 가 fleetview_reply 도구 호출
+   → POST /api/channel/reply → 대기 중이던 요청을 깨움 → 대시보드에 표시
 ```
 
-채널 프로세스는 Claude 가 자식으로 띄우므로, `process.ppid` → `~/.claude/sessions/<ppid>.json`
-으로 자기가 어느 세션에 속하는지 알아낼 수 있습니다 (이미 그 파일 구조는 확인했습니다).
+**구성 파일**
 
-`@modelcontextprotocol/sdk` 1.30.0 설치까지 마쳤고, 구현은 시작 전입니다.
+| 파일 | 역할 |
+|---|---|
+| `channel/fleetview-channel.js` | stdio MCP 서버. 세션 판별 → 등록 → 롱폴링 → 주입 → 답장 |
+| `server/channelHub.js` | 세션별 큐, 롱폴링 보류, 답장 매칭 |
+| `server/adapters/claudeChannel.js` | 어댑터 규격으로 감싼 것 |
 
----
+**자기 세션 판별:** Claude Code 가 채널을 자식 프로세스로 띄우므로, `process.ppid` 부터
+위로 거슬러 올라가며 `~/.claude/sessions/<pid>.json` 을 찾는다. 중간에 셸이 끼는 경우가
+있어 최대 6단계까지 올라간다.
+
+**설치**
+
+```bash
+claude mcp add --scope user fleetview -- node <경로>/fleetview/channel/fleetview-channel.js
+```
+
+**세션 시작** (프리뷰라 커스텀 채널은 개발 플래그 필요)
+
+```bash
+claude --dangerously-load-development-channels server:fleetview
+claude --resume <세션id> --dangerously-load-development-channels server:fleetview
+```
+
+**제약**
+- 이미 떠 있는 세션에는 나중에 못 붙인다. 세션당 최초 1회 재시작이 필요하다.
+- 리서치 프리뷰라 플래그 문법이 바뀔 수 있다.
+
+### 6.1 붙이면서 걸린 것 — 자식 세션 마커 상속
+
+FleetView 서버(=내 Claude Code 세션의 자식)에서 테스트용 세션을 띄웠더니 이렇게 떴다.
+
+```
+⚠ Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION marker
+```
+
+자식 세션으로 인식되어 트랜스크립트가 저장되지 않았고, 따라서
+`~/.claude/sessions/<pid>.json` 도 생기지 않아 채널이 자기 세션을 찾지 못했다.
+
+**수정:** 세션을 띄울 때 `CLAUDE_CODE_CHILD_SESSION` / `CLAUDE_CODE_SESSION_ID` /
+`CLAUDE_CODE_ENTRYPOINT` 를 비우고 실행한다. FleetView 가 세션을 띄우는 기능을
+만들 때 이 처리를 반드시 넣어야 한다.
 
 ## 7. 재현 방법
 
