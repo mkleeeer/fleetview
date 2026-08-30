@@ -160,6 +160,8 @@ function analyze(file, projectDirName) {
     lastTool,
     lastUser: clip(lastUserText, 160),
     lastAssistant: clip(lastAssistantText, 200),
+    // 채널이 답을 주워 올 때 쓰므로 자르지 않은 것도 함께 둔다
+    lastAssistantFull: lastAssistantText,
     updatedAt: st.mtimeMs,
     file,
   };

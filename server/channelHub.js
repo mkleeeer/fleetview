@@ -8,6 +8,7 @@
  * 크롬 확장용 bridge.js 와 구조가 같다. 다만 세션이 여럿이라 세션별로 큐를 둔다.
  */
 const store = require('./store');
+const sessions = require('./claudeSessions');
 
 const REPLY_TIMEOUT = 600000;   // 클로드는 오래 걸리는 작업을 할 수 있다
 const HOLD_MS = 25000;          // 롱폴링 유지 시간
@@ -64,35 +65,80 @@ function hold(sid, res) {
   flush(sid);
 }
 
-/** 대시보드 → 세션. 답이 돌아올 때까지 기다린다. */
+/**
+ * 대시보드 → 세션. 답이 돌아올 때까지 기다린다.
+ *
+ * 답을 받는 길이 둘이다.
+ *   1) Claude 가 fleetview_reply 도구를 부른다 — 가장 정확하다
+ *   2) 안 부르면 세션 기록 파일에서 새로 생긴 응답을 주워 온다
+ *
+ * 2번이 필요한 이유: 지시문에 "반드시 도구를 부르라" 고 써도 강제할 수 없다.
+ * 짧은 대화일수록 그냥 화면에만 답하고 끝내는데, 그러면 대시보드가 영영 기다린다.
+ */
 function send(sessionId, text) {
   if (!channels.has(sessionId)) {
     const e = new Error('이 세션에는 FleetView 채널이 붙어 있지 않습니다');
     e.code = 'unavailable';
     return Promise.reject(e);
   }
+
+  const before = lastAssistantOf(sessionId);
   const id = store.uid('msg');
   queueOf(sessionId).push({ id, text });
   flush(sessionId);
 
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
+    let done = false;
+    const finish = (fn, arg) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      clearInterval(watch);
       pending.delete(id);
+      fn(arg);
+    };
+
+    // 1) 도구 호출을 기다린다
+    pending.set(id, {
+      resolve: (v) => finish(resolve, v),
+      reject: (e) => finish(reject, e),
+      timer: null,
+    });
+
+    // 2) 기록 파일도 함께 살핀다. 도구를 안 불러도 답을 건진다.
+    let stable = 0;
+    let seen = '';
+    const watch = setInterval(() => {
+      const cur = lastAssistantOf(sessionId);
+      if (!cur || cur === before) return;
+      if (cur === seen) {
+        stable++;
+        if (stable >= 2) finish(resolve, { text: cur, sessionId, via: 'transcript' });
+      } else {
+        seen = cur;
+        stable = 0;
+      }
+    }, 1500);
+
+    const timer = setTimeout(() => {
       const e = new Error('세션이 제한 시간 안에 답하지 않았습니다');
       e.code = 'timeout';
-      reject(e);
+      finish(reject, e);
     }, REPLY_TIMEOUT);
-    pending.set(id, { resolve, reject, timer });
   });
+}
+
+/** 세션 기록에서 마지막 어시스턴트 발화를 읽는다 */
+function lastAssistantOf(sessionId) {
+  const s = sessions.scan().find((x) => x.id === sessionId);
+  return (s && (s.lastAssistantFull || s.lastAssistant)) || '';
 }
 
 /** 세션 → 대시보드 */
 function reply({ sessionId, msgId, text }) {
   const p = pending.get(msgId);
   if (!p) return false;
-  pending.delete(msgId);
-  clearTimeout(p.timer);
-  p.resolve({ text: text || '', sessionId });
+  p.resolve({ text: text || '', sessionId, via: 'tool' });
   return true;
 }
 
