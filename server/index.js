@@ -2,7 +2,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 
 const store = require('./store');
 const bridge = require('./bridge');
@@ -295,6 +295,7 @@ const server = http.createServer(async (req, res) => {
       const key = logKey || ('ad:' + id + ':' + (threadId || 'new'));
       store.log(key, { role: 'user', text });
       store.broadcast('busy', { key, busy: true });
+      store.state.busy++;
       try {
         const onDelta = stream === false ? undefined
           : (chunk) => store.broadcast('delta', { key, chunk });
@@ -307,6 +308,7 @@ const server = http.createServer(async (req, res) => {
         store.log(key, { role: 'sys', text: body.message });
         return json(res, 200, { ok: false, error: body.message, adapterError: body });
       } finally {
+        store.state.busy--;
         store.broadcast('busy', { key, busy: false });
       }
     }
@@ -475,14 +477,35 @@ setInterval(() => store.pushState(), 5000);
 // 사람이 재시작을 신경 쓰지 않아도 되도록 하기 위한 것이다.
 function watchSources() {
   const dirs = [__dirname, path.join(__dirname, 'adapters'), path.join(__dirname, '..', 'channel')];
-  let closing = false;
+  let pendingRestart = false;
+
+  // 처리 중인 요청이 있으면 끝날 때까지 기다렸다 재시작한다.
+  // 안 그러면 사용자가 메시지를 보낸 순간 재시작이 걸려 답이 통째로 날아간다.
+  function restartWhenIdle() {
+    if (store.state.busy > 0) return setTimeout(restartWhenIdle, 1000);
+    console.log('[코드 변경] 다시 시작합니다');
+
+    // 새 서버를 직접 띄우고 물러난다. 배치 파일이나 창이 필요 없다.
+    // 셸을 거치지 않으므로 한글 경로에서도 깨지지 않는다.
+    server.close();
+    const child = spawn(process.execPath, [__filename], {
+      cwd: path.join(__dirname, '..'),
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+      env: process.env,
+    });
+    child.unref();
+    setTimeout(() => process.exit(0), 300);
+  }
+
   for (const dir of dirs) {
     try {
       fs.watch(dir, (evt, name) => {
-        if (closing || !name || !name.endsWith('.js')) return;
-        closing = true;
-        console.log(`[코드 변경] ${name} — 다시 시작합니다`);
-        setTimeout(() => process.exit(0), 400);   // 저장이 끝날 시간을 준다
+        if (pendingRestart || !name || !name.endsWith('.js')) return;
+        pendingRestart = true;
+        console.log('[코드 변경] ' + name + ' — 처리 중인 작업이 끝나면 다시 시작합니다');
+        setTimeout(restartWhenIdle, 400);   // 저장이 끝날 시간을 준다
       });
     } catch { /* 폴더가 없으면 넘어간다 */ }
   }
