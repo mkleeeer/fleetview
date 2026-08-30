@@ -1,0 +1,18 @@
+{
+  "name": "fleetview",
+  "version": "1.0.0",
+  "private": true,
+  "description": "클로드·제미나이·지피티 멀티세션 관제 대시보드",
+  "main": "desktop/main.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "desktop": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^33.0.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.122.0",
+    "@modelcontextprotocol/sdk": "^1.30.0"
+  }
+}

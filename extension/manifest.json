@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "FleetView Bridge",
+  "version": "1.0.0",
+  "description": "크롬 창/탭 현황을 FleetView 대시보드에 보내고, 대시보드에서 온 명령(포커스·전송·응답 읽기)을 실행합니다.",
+  "permissions": ["tabs", "scripting", "alarms", "storage"],
+  "host_permissions": [
+    "http://localhost:7777/*",
+    "http://127.0.0.1:7777/*",
+    "https://claude.ai/*",
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "https://gemini.google.com/*"
+  ],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": { "default_title": "FleetView 대시보드 열기" }
+}

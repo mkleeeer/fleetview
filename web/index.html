@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FleetView</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <span class="logo">FV</span>
+    <b>FleetView</b>
+    <span class="muted">클로드 · 제미나이 · 지피티 통합 관제</span>
+  </div>
+  <div class="top-right">
+    <span id="extPill" class="pill off">확장 미연결</span>
+    <span id="ccPill" class="pill">Claude Code 0</span>
+    <button id="btnNewTask" class="btn primary">+ 새 작업</button>
+  </div>
+</header>
+
+<main>
+  <!-- 작업(워크플로우) 보드 -->
+  <section class="board">
+    <h2 class="sec-title">작업 <span class="muted">— 한 작업 안에서 세 AI가 역할을 나눠 맡습니다</span></h2>
+    <div id="workflows"></div>
+    <div id="wfEmpty" class="empty hidden">
+      아직 작업이 없습니다. <b>+ 새 작업</b>을 눌러 <span class="muted">예: 영상 만들기 → 수집(클로드) → 분석(제미나이) → 대본(지피티)</span>
+    </div>
+  </section>
+
+  <!-- 어댑터 -->
+  <section class="pool">
+    <h2 class="sec-title">연결 <span class="muted">— 모든 AI가 같은 규격으로 붙습니다</span></h2>
+    <div id="adapters" class="adapters"></div>
+  </section>
+
+  <!-- 세션 풀 -->
+  <section class="pool">
+    <h2 class="sec-title">세션 <span class="muted">— 클릭하면 대화창, 화살표를 누르면 그 화면으로 이동</span></h2>
+    <div class="lanes">
+      <div class="lane" data-p="claude">
+        <div class="lane-head"><span class="dot claude"></span>클로드<span id="cntClaude" class="count">0</span></div>
+        <div class="lane-body" id="laneClaude"></div>
+      </div>
+      <div class="lane" data-p="gemini">
+        <div class="lane-head"><span class="dot gemini"></span>제미나이<span id="cntGemini" class="count">0</span></div>
+        <div class="lane-body" id="laneGemini"></div>
+      </div>
+      <div class="lane" data-p="chatgpt">
+        <div class="lane-head"><span class="dot chatgpt"></span>지피티<span id="cntChatgpt" class="count">0</span></div>
+        <div class="lane-body" id="laneChatgpt"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 크롬 창 현황 -->
+  <section class="pool">
+    <h2 class="sec-title">크롬 창 <span class="muted">— 지금 띄워둔 것들</span></h2>
+    <div id="windows" class="windows"></div>
+    <div id="winEmpty" class="empty">크롬 확장이 연결되면 여기에 창과 탭이 표시됩니다.</div>
+  </section>
+</main>
+
+<!-- 대화 드로어 -->
+<aside id="drawer" class="drawer">
+  <div class="drawer-head">
+    <div>
+      <div id="drawerTitle" class="dtitle">세션</div>
+      <div id="drawerSub" class="muted small"></div>
+    </div>
+    <div class="drawer-actions">
+      <button id="drawerGo" class="btn">→ 이 화면으로 이동</button>
+      <button id="drawerClose" class="btn ghost">✕</button>
+    </div>
+  </div>
+  <div id="chat" class="chat"></div>
+  <div id="drawerWarn" class="warn hidden"></div>
+  <div class="composer">
+    <textarea id="chatInput" rows="3" placeholder="여기에 입력하면 해당 앱으로 바로 전송됩니다. (Ctrl+Enter 전송)"></textarea>
+    <button id="chatSend" class="btn primary">전송</button>
+  </div>
+</aside>
+<div id="scrim" class="scrim"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>
