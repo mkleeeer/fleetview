@@ -34,7 +34,9 @@
 모든 연결은 **어댑터 공통 규격**을 지납니다.
 
 ```js
-id, provider, label, kind        // kind: 'api' | 'cli' | 'ui'
+id, provider, label
+kind      // 'api' | 'cli' | 'ui'      — 어떻게 붙었나 (안정성)
+agentType // 'coding' | 'chat'         — 뭘 할 수 있나
 capabilities: { streaming, tools, history, threads, createThread }
 async health()      -> { ok, reason }
 async listThreads() -> [{ id, title, updatedAt, meta }]
@@ -45,15 +47,15 @@ async send({ threadId, text, cwd, onDelta }) -> { text, threadId, usage, toolCal
 `auth` `rate_limit` `unavailable` `bad_request` `timeout` `unsupported` `not_found` `internal`
 각각 `retryable` 플래그가 붙습니다.
 
-| 어댑터 | kind | 인증 | 상태 |
-|---|---|---|---|
-| `claude-code` | cli | 구독 | 동작 확인 |
-| `anthropic-api` | api | API 키 | **미검증** (키 없음) |
-| `claude-tab` | ui | 브라우저 | 미검증 |
-| `gemini-tab` | ui | 브라우저 | 읽기 확인, 전송 1회 성공 후 회귀 |
-| `chatgpt-tab` | ui | 브라우저 | 읽기 확인 |
-| `chatgpt-app` | ui | 앱 | 전송 왕복 확인 (9.8초) |
-| `codex-cli` | cli | ChatGPT 구독 | **기존 세션 이어가기 확인 (7.8초)** |
+| 어댑터 | kind | agentType | 인증 | 상태 |
+|---|---|---|---|---|
+| `claude-code` | cli | coding | 구독 | 동작 확인 |
+| `codex-cli` | cli | coding | ChatGPT 구독 | **기존 세션 이어가기 확인 (7.8초)** |
+| `anthropic-api` | api | chat | API 키 | **미검증** (키 없음) |
+| `claude-tab` | ui | chat | 브라우저 | 미검증 |
+| `gemini-tab` | ui | chat | 브라우저 | 읽기 확인, 전송 1회 성공 후 회귀 |
+| `chatgpt-tab` | ui | chat | 브라우저 | 읽기 확인 |
+| `chatgpt-app` | ui | chat | 앱 | 전송 왕복 확인 (9.8초) |
 
 ---
 
@@ -216,26 +218,6 @@ extOnline: Date.now() - extLastSeen < 8000   // 8초
   BOM 없는 `.ps1` 을 ANSI(CP949)로 읽습니다. 한글이 깨지면서 CP949 뒷바이트가
   백틱으로 해석돼 따옴표가 escape 되고 파싱이 깨졌습니다. UTF-8 **with BOM** 필수.
 
----
-
-## 5. 지금 안 되는 것
-
-| 항목 | 상태 | 이유 |
-|---|---|---|
-| Claude 데스크톱 앱 연결 | **영구 불가** | 앱이 디버그 스위치를 거부. 우회 안 함 |
-| 실행 중인 Claude 세션에 주입 | 미구현 | 아래 6장 참고. Codex 는 `codex queue` 로 이미 가능 |
-| Anthropic API 어댑터 | 미검증 | API 키 없음. 계정 크레딧 $0 |
-| 웹 탭 전송 (수정 후) | 미검증 | 테스트 실수로 두 번 깨짐 |
-| 워크플로우 담당 드롭다운 | 구식 | 어댑터 기준이 아니라 예전 타깃 기준 |
-| 수동 카드 | UI 없음 | 서버 API 만 있고 화면에서 추가 불가 |
-| 대화 로그 영속화 | 없음 | 메모리에만. 서버 재시작 시 소실 |
-| 워크플로우 분기/병렬 | 없음 | 순차 실행만 |
-| 서버 자동 시작 | 없음 | `start.cmd` 수동 실행 |
-| 인증 | 없음 | localhost 바인딩만. 로컬 프로그램은 누구나 API 호출 가능 |
-| Electron 데스크톱 앱 | 코드만 | `desktop/main.js` 작성됨, `npm install electron` 미실행 |
-
----
-
 ### 4.9 지피티도 공식 CLI 를 놔두고 화면을 뒤지고 있었다
 
 "지피티를 앱으로 쓴다" 는 말에 앱 화면 조종(CDP)으로 갔습니다. 그런데
@@ -279,6 +261,26 @@ agentType   = coding | chat       ← 뭘 할 수 있나
 
 역할(`조사` / `문서` / `검수`)은 agentType 이 아니라 **워크플로우 단계 배정**입니다.
 같은 세션이 작업에 따라 다른 역할을 맡습니다.
+
+---
+
+## 5. 지금 안 되는 것
+
+| 항목 | 상태 | 이유 |
+|---|---|---|
+| Claude 데스크톱 앱 연결 | **영구 불가** | 앱이 디버그 스위치를 거부. 우회 안 함 |
+| 실행 중인 Claude 세션에 주입 | 미구현 | 아래 6장 참고. Codex 는 `codex queue` 로 이미 가능 |
+| Anthropic API 어댑터 | 미검증 | API 키 없음. 계정 크레딧 $0 |
+| 웹 탭 전송 (수정 후) | 미검증 | 테스트 실수로 두 번 깨짐 |
+| 워크플로우 담당 드롭다운 | 구식 | 어댑터 기준이 아니라 예전 타깃 기준 |
+| 수동 카드 | UI 없음 | 서버 API 만 있고 화면에서 추가 불가 |
+| 대화 로그 영속화 | 없음 | 메모리에만. 서버 재시작 시 소실 |
+| 워크플로우 분기/병렬 | 없음 | 순차 실행만 |
+| 서버 자동 시작 | 없음 | `start.cmd` 수동 실행 |
+| 인증 | 없음 | localhost 바인딩만. 로컬 프로그램은 누구나 API 호출 가능 |
+| Electron 데스크톱 앱 | 코드만 | `desktop/main.js` 작성됨, `npm install electron` 미실행 |
+
+---
 
 ## 6. 다음 단계 — Claude Code Channels
 
